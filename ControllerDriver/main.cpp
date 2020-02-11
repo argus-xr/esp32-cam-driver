@@ -10,12 +10,10 @@ unsigned long getLoopTime() {
 void initialize() {
   Serial.begin(115200);
 
-  Packet* p = new Packet();
-  p->data = new uint8_t[5];
-  memcpy(p->data, "Test", 5);
-  p->length = 5;
-  p->priority = 255;
-  pushNetworkPacket(p);
+  uint8_t* _data = new uint8_t[5];
+  memcpy(_data, "Test", 5);
+  makeNetworkPacket(0, _data, 5, 255);
+  delete _data;
 }
 
 void runLoop() {

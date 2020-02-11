@@ -10,7 +10,18 @@ typedef struct Packet {
 };
 
 void handleNetworkStuff();
+
 void pushNetworkPacket(Packet* packet);
+void makeNetworkPacket(const uint8_t &type, const uint8_t* contents, uint16_t contentLength, const uint8_t &priority);
 bool isConnected();
+
+template <typename T>
+void swapEndian(T &val);
+
+template <typename T>
+inline void swapEndianIfNeeded(T &val); // only swap if not using big endian.
+
+template <typename T>
+void writeNumberToBuffer(T val, uint8_t* buf, const uint16_t &pos);
 
 #endif
