@@ -112,13 +112,13 @@ void swapEndian<int8_t>(int8_t &val) {
 template <typename T>
 void writeNumberToBuffer(T val, uint8_t* buf, const uint16_t &pos) {
   swapEndian(val);
-  memcpy(&buf[pos], (uint8_t*) &val, sizeof(T));
+  memcpy(&buf[pos], &val, sizeof(T));
 }
 
 template <typename T>
 T readNumberFromBuffer(uint8_t* buf, const uint16_t &pos) {
   T result;
-  memcpy((uint8_t*) &result, &buf[pos], sizeof(T));
+  memcpy(&result, &buf[pos], sizeof(T));
   swapEndian(result);
   return result;
 }
@@ -139,6 +139,7 @@ void checkMessages() {
       inputBuffer = new uint8_t[inputMaxLength];
       if (tmp != NULL) {
         memcpy(inputBuffer, tmp, inputCurrentLength);
+        delete[] tmp;
       }
     }
     memcpy(inputBuffer + inputCurrentLength, readBuf, bytes); // add newly read data to buffer
@@ -146,7 +147,7 @@ void checkMessages() {
   }
 
   if (newData) {
-    
+    // TODO process messages? We could probably call processMessage(inputBuffer, inputCurrentLength) here, but I haven't checked yet and I'm currently just patching the leaks in my PR.
   }
 }
 
@@ -158,5 +159,7 @@ void processMessage(uint8_t* message, uint16_t len) {
     return;
   }
   uint16_t msgLen = readNumberFromBuffer<uint16_t>(message, 1);
+  // TODO: finish this function. It's supposed to split the receive buffer into discrete messages and pass them into relevant parsing functions.
 }
-}
+
+} // namespace NH

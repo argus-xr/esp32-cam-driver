@@ -20,9 +20,6 @@ namespace NH {
   void swapEndian(T &val);
   
   template <typename T>
-  inline void swapEndianIfNeeded(T &val); // only swap if not using big endian.
-  
-  template <typename T>
   void writeNumberToBuffer(T val, uint8_t* buf, const uint16_t &pos);
   
   template <typename T>
