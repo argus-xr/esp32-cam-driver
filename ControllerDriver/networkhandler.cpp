@@ -3,7 +3,10 @@
 #include <WiFi.h>
 #include "networkconfig.h"
 #include "main.h"
+//#include "utility/util.h"
 
+namespace NH {
+  
 const char* ssid     = NETSSID;
 const char* password = NETPASS;
 const char* host = NETHOST;
@@ -18,11 +21,19 @@ WiFiClient client;
 int wStatus = WL_IDLE_STATUS;
 QueueArray<struct Packet*> buffer;
 
+#define readBufferSize 1500
+uint8_t readBuf[readBufferSize];
+
+uint8_t* inputBuffer = NULL;
+uint32_t inputCurrentLength = 0;
+uint32_t inputMaxLength = 0;
+#define inputSizeStep 64
+
 void handleNetworkStuff() {
-  if(waitUntil < getLoopTime()) {
+  if (waitUntil < getLoopTime()) {
     wStatus = WiFi.status();
   
-    if(wStatus != WL_CONNECTED && wStatus != WL_IDLE_STATUS) {
+    if (wStatus != WL_CONNECTED && wStatus != WL_IDLE_STATUS) {
       WiFi.begin(ssid, password);
       Serial.print("Current status: ");
       Serial.print(wStatus);
@@ -31,10 +42,10 @@ void handleNetworkStuff() {
       waitUntil = getLoopTime() + 500;
     }
     
-    if(wStatus == WL_CONNECTED) {
-      if(client.connected()) {
+    if (wStatus == WL_CONNECTED) {
+      if (client.connected()) {
         Packet* p = buffer.pop();
-        if(p != NULL) {
+        if (p != NULL) {
           int sent = client.write(p->data, p->length);
           Serial.print("Bytes sent: ");
           Serial.println(sent);
@@ -42,15 +53,12 @@ void handleNetworkStuff() {
           delete p;
         }
       
-        // Read all the lines of the reply from server and print them to Serial
-        while (client.available()) {
-          String line = client.readStringUntil('\0');
-          Serial.print(line);
-        }
+        checkMessages();
       } else {
-        if(client.connect(host, serverPort)) {
+        if (client.connect(host, serverPort)) {
           Serial.print("Connected to ");
           Serial.println(host);
+          client.setNoDelay(true); // consider setSync(true): flushes each write, slower but does not allocate temporary memory.
         } else {
           Serial.print("Failed to connect to ");
           Serial.println(host);
@@ -65,6 +73,7 @@ void pushNetworkPacket(Packet* packet) {
 }
 
 void makeNetworkPacket(const uint8_t &type, const uint8_t* contents, uint16_t contentLength, const uint8_t &priority) {
+  assert(contentLength <= 1500); // TODO: implement a multi-packet message type.
   Packet* p = new Packet();
   
   uint16_t pSize = contentLength + 5;
@@ -83,26 +92,71 @@ bool isConnected() {
   return (wStatus == WL_CONNECTED);
 }
 
-template <typename T>
-void swapEndian(T &val) {
-    union U {
-        T val;
-        std::array<std::uint8_t, sizeof(T)> raw;
-    } src, dst;
-
-    src.val = val;
-    std::reverse_copy(src.raw.begin(), src.raw.end(), dst.raw.begin());
-    val = dst.val;
+template <>
+void swapEndian<uint32_t>(uint32_t &val) {
+    val = htonl(val);
 }
-
-template <typename T>
-inline void swapEndianIfNeeded(T &val) {
-  // ifdef to determine byte order? ESP32 and Arduino is little-endian and needs a byte swap for network byte order.
-  swapEndian(val);
+template <>
+void swapEndian<uint16_t>(uint16_t &val) {
+    val = htons(val);
+}
+template <>
+void swapEndian<uint8_t>(uint8_t &val) {
+    // do nothing.
+}
+template <>
+void swapEndian<int8_t>(int8_t &val) {
+    // do nothing.
 }
 
 template <typename T>
 void writeNumberToBuffer(T val, uint8_t* buf, const uint16_t &pos) {
-  swapEndianIfNeeded(val);
+  swapEndian(val);
   memcpy(&buf[pos], (uint8_t*) &val, sizeof(T));
+}
+
+template <typename T>
+T readNumberFromBuffer(uint8_t* buf, const uint16_t &pos) {
+  T result;
+  memcpy((uint8_t*) &result, &buf[pos], sizeof(T));
+  swapEndian(result);
+  return result;
+}
+
+void checkMessages() {
+  bool newData = false;
+  while (client.available()) {
+    int bytes = client.read(readBuf, readBufferSize);
+    if (bytes <= 0) {
+      break;
+    } else {
+      newData = true;
+    }
+    
+    if (inputMaxLength < inputCurrentLength + bytes) { // resize buffer if needed
+      uint8_t* tmp = inputBuffer;
+      inputMaxLength = inputCurrentLength + bytes + inputSizeStep;
+      inputBuffer = new uint8_t[inputMaxLength];
+      if (tmp != NULL) {
+        memcpy(inputBuffer, tmp, inputCurrentLength);
+      }
+    }
+    memcpy(inputBuffer + inputCurrentLength, readBuf, bytes); // add newly read data to buffer
+    inputCurrentLength += bytes;
+  }
+
+  if (newData) {
+    
+  }
+}
+
+void processMessage(uint8_t* message, uint16_t len) {
+  if (len < 5) {
+    return;
+  }
+  if (message[0] != '|') {
+    return;
+  }
+  uint16_t msgLen = readNumberFromBuffer<uint16_t>(message, 1);
+}
 }
