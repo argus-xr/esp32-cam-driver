@@ -1,4 +1,5 @@
 # CameraSerial
+This program takes a photo with the ESP32-CAM and prints it as a BMP hex dump to serial.  It is intended as a test of the ESP32-CAM without a dependency on Wi-Fi configuration and networking.  Instructions for uploading and usage are below.  
 
 ### Uploading
 To upload and use this program, you can use the Arduino IDE or another environment capable of uploading to the ESP32-CAM and communicating with it over serial.  These instructions assume you have set up the Aruino IDE for uploading to the ESP32-CAM; for details, see [Programming the ESP32 Cam](https://github.com/argus-xr/argus-xr/wiki/Programming-the-ESP32-Cam) on the `argus-xr` wiki. 
