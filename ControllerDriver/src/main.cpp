@@ -7,7 +7,7 @@ unsigned long getLoopTime() {
   return loopTime;
 }
 
-void initialize() {
+void setup() {
   Serial.begin(115200);
 
   uint8_t* _data = new uint8_t[5];
@@ -16,7 +16,7 @@ void initialize() {
   delete _data;
 }
 
-void runLoop() {
+void loop() {
   loopTime = millis();
 
   NH::handleNetworkStuff();

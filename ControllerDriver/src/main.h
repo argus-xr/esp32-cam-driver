@@ -3,7 +3,7 @@
 
 unsigned long getLoopTime();
 
-void initialize();
-void runLoop();
+void setup();
+void loop();
 
 #endif
