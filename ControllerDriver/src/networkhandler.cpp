@@ -76,13 +76,15 @@ void makeNetworkPacket(const uint8_t &type, const uint8_t* contents, uint16_t co
   assert(contentLength <= 1500); // TODO: implement a multi-packet message type.
   Packet* p = new Packet();
   
-  uint16_t pSize = contentLength + 5;
-  p->data = new uint8_t[pSize]; // 2 for ||, 2 for length, 1 for type.
-  p->data[0] = '|';
-  writeNumberToBuffer<uint16_t>(contentLength, p->data, 1);
-  writeNumberToBuffer<uint8_t>(type, p->data, 3);
-  memcpy(&p->data[4], contents, contentLength);
-  p->data[pSize - 1] = '|';
+  uint16_t pSize = contentLength + 7;
+  p->data = new uint8_t[pSize]; // 2 for \0, 2 for \1, 2 for length, 1 for type.
+  p->data[0] = '\\';
+  p->data[1] = 0;
+  writeNumberToBuffer<uint16_t>(contentLength, p->data, 2);
+  writeNumberToBuffer<uint8_t>(type, p->data, 4);
+  memcpy(&p->data[5], contents, contentLength);
+  p->data[pSize - 2] = '\\';
+  p->data[pSize - 1] = 1;
   p->length = pSize;
   p->priority = priority;
   pushNetworkPacket(p);
