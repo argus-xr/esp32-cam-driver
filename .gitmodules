@@ -1,0 +1,3 @@
+[submodule "ControllerDriver/lib/argus-utils"]
+	path = ControllerDriver/lib/argus-utils
+	url = https://github.com/argus-xr/argus-utils.git

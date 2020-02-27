@@ -3,7 +3,7 @@
 
 // Copy this file and rename it to networkconfig.h
 
-#define NETSSID "AbandonAllHopeYeWhoEnterHere"
-#define NETPASS "FamilieDekker"
-#define NETHOST "192.168.11.122"
+#define NETSSID "ArgusTestNetwork"
+#define NETPASS "ArgusPass"
+#define NETHOST "192.168.137.1"
 #endif

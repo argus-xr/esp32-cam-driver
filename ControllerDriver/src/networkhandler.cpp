@@ -13,8 +13,6 @@ const char* host = NETHOST;
 
 const int serverPort = 11000;
 
-unsigned long waitUntil = 0;
-
 // Use WiFiClient class to create TCP connections
 WiFiClient client;
 
@@ -24,36 +22,48 @@ QueueArray<struct Packet*> buffer;
 #define readBufferSize 1500
 uint8_t readBuf[readBufferSize];
 
-uint8_t* inputBuffer = NULL;
-uint32_t inputCurrentLength = 0;
-uint32_t inputMaxLength = 0;
-#define inputSizeStep 64
+BasicMessageBuffer* buf = new BasicMessageBuffer();
 
 void handleNetworkStuff() {
-  if (waitUntil < getLoopTime()) {
+  try {
     wStatus = WiFi.status();
-  
+
     if (wStatus != WL_CONNECTED && wStatus != WL_IDLE_STATUS) {
       WiFi.begin(ssid, password);
       Serial.print("Current status: ");
       Serial.print(wStatus);
       Serial.print(". Reconnecting to ");
       Serial.println(ssid);
-      waitUntil = getLoopTime() + 500;
+      delay(500);
     }
     
     if (wStatus == WL_CONNECTED) {
       if (client.connected()) {
-        Packet* p = buffer.pop();
-        if (p != NULL) {
-          int sent = client.write(p->data, p->length);
-          Serial.print("Bytes sent: ");
-          Serial.println(sent);
-          delete[] p->data;
-          delete p;
+        if (!buffer.isEmpty()) {
+          try {
+            Packet* p = buffer.pop();
+            if (p != nullptr) {
+              if (p->length > 0 && p->data != NULL && p->data != nullptr) {
+                Serial.println("Sending message.");
+                int sent = client.write(p->data, p->length);
+                Serial.print("Bytes sent: ");
+                Serial.println(sent);
+              }
+              if(p->data != NULL) {
+                delete[] p->data;
+              }
+              delete p;
+            }
+          } catch (std::exception e) {
+            Serial.println(e.what());
+          }
         }
-      
-        checkMessages();
+
+        try {
+          checkMessages();
+        } catch (std::exception e) {
+          Serial.println(e.what());
+        }
       } else {
         if (client.connect(host, serverPort)) {
           Serial.print("Connected to ");
@@ -65,6 +75,9 @@ void handleNetworkStuff() {
         }
       }
     }
+  } catch (std::exception e) {
+    Serial.print("Exception in network handler: ");
+    Serial.println(e.what());
   }
 }
 
@@ -72,21 +85,9 @@ void pushNetworkPacket(Packet* packet) {
   buffer.enqueue(packet);
 }
 
-void makeNetworkPacket(const uint8_t &type, const uint8_t* contents, uint16_t contentLength, const uint8_t &priority) {
-  assert(contentLength <= 1500); // TODO: implement a multi-packet message type.
+void makeNetworkPacket(NetMessageOut* msg) {
   Packet* p = new Packet();
-  
-  uint16_t pSize = contentLength + 7;
-  p->data = new uint8_t[pSize]; // 2 for \0, 2 for \1, 2 for length, 1 for type.
-  p->data[0] = '\\';
-  p->data[1] = 0;
-  writeNumberToBuffer<uint16_t>(contentLength, p->data, 2);
-  writeNumberToBuffer<uint8_t>(type, p->data, 4);
-  memcpy(&p->data[5], contents, contentLength);
-  p->data[pSize - 2] = '\\';
-  p->data[pSize - 1] = 1;
-  p->length = pSize;
-  p->priority = priority;
+  p->length = buf->messageOutToByteArray(p->data, msg);
   pushNetworkPacket(p);
 }
 
@@ -94,74 +95,50 @@ bool isConnected() {
   return (wStatus == WL_CONNECTED);
 }
 
-template <>
-void swapEndian<uint32_t>(uint32_t &val) {
-    val = htonl(val);
-}
-template <>
-void swapEndian<uint16_t>(uint16_t &val) {
-    val = htons(val);
-}
-template <>
-void swapEndian<uint8_t>(uint8_t &val) {
-    // do nothing.
-}
-template <>
-void swapEndian<int8_t>(int8_t &val) {
-    // do nothing.
-}
-
-template <typename T>
-void writeNumberToBuffer(T val, uint8_t* buf, const uint16_t &pos) {
-  swapEndian(val);
-  memcpy(&buf[pos], &val, sizeof(T));
-}
-
-template <typename T>
-T readNumberFromBuffer(uint8_t* buf, const uint16_t &pos) {
-  T result;
-  memcpy(&result, &buf[pos], sizeof(T));
-  swapEndian(result);
-  return result;
-}
-
 void checkMessages() {
-  bool newData = false;
   while (client.available()) {
     int bytes = client.read(readBuf, readBufferSize);
     if (bytes <= 0) {
       break;
     } else {
-      newData = true;
+      buf->insertBuffer(readBuf, bytes, true);
+      buf->checkMessages();
     }
-    
-    if (inputMaxLength < inputCurrentLength + bytes) { // resize buffer if needed
-      uint8_t* tmp = inputBuffer;
-      inputMaxLength = inputCurrentLength + bytes + inputSizeStep;
-      inputBuffer = new uint8_t[inputMaxLength];
-      if (tmp != NULL) {
-        memcpy(inputBuffer, tmp, inputCurrentLength);
-        delete[] tmp;
-      }
+  }
+  NetMessageIn* msg = nullptr;
+  do {
+    msg = buf->popMessage();
+    if(msg != nullptr) {
+      processMessage(msg);
     }
-    memcpy(inputBuffer + inputCurrentLength, readBuf, bytes); // add newly read data to buffer
-    inputCurrentLength += bytes;
-  }
-
-  if (newData) {
-    // TODO process messages? We could probably call processMessage(inputBuffer, inputCurrentLength) here, but I haven't checked yet and I'm currently just patching the leaks in my PR.
-  }
+    delete msg;
+  } while(msg != nullptr);
 }
 
-void processMessage(uint8_t* message, uint16_t len) {
-  if (len < 5) {
-    return;
+void processMessage(NetMessageIn* msg) {
+  uint8_t type = msg->readVarInt();
+  Serial.println("Message received.");
+  Serial.printf("Length: %d, type: %d.\n", msg->getInternalBufferLength(), type);
+  switch(type) {
+    case 0:
+      std::string text = msg->readVarString();
+      Serial.printf("Message: %s", text.c_str());
+      break;
   }
-  if (message[0] != '|') {
-    return;
+}
+  
+
+TaskHandle_t loopTaskHandle = NULL;
+
+void startNetworkHandlerTask() {
+  xTaskCreateUniversal(networkHandlerLoop, "NetworkLoop", 16000, NULL, 0, &loopTaskHandle, CONFIG_ARDUINO_RUNNING_CORE);
+}
+
+void networkHandlerLoop(void *pvParameters) {
+  while(true) {
+    handleNetworkStuff();
+    delay(1);
   }
-  uint16_t msgLen = readNumberFromBuffer<uint16_t>(message, 1);
-  // TODO: finish this function. It's supposed to split the receive buffer into discrete messages and pass them into relevant parsing functions.
 }
 
 } // namespace NH
