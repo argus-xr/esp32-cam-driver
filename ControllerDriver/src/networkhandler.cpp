@@ -24,6 +24,11 @@ uint8_t readBuf[readBufferSize];
 
 BasicMessageBuffer* buf = new BasicMessageBuffer();
 
+TaskHandle_t loopTaskHandle = NULL;
+QueueHandle_t messageQueue = NULL;
+const TickType_t xBlockTime = pdMS_TO_TICKS( 200 );
+
+
 void handleNetworkStuff() {
   try {
     wStatus = WiFi.status();
@@ -35,6 +40,16 @@ void handleNetworkStuff() {
       Serial.print(". Reconnecting to ");
       Serial.println(ssid);
       delay(500);
+    }
+
+    if(messageQueue != NULL) {
+      NetMessageOut* msg = NULL;
+      while(xQueueReceive( messageQueue, &msg, 0 )) { // returns true if there's any messages
+        if(msg != NULL && msg != nullptr) {
+          makeNetworkPacket(msg);
+          delete msg;
+        }
+      }
     }
     
     if (wStatus == WL_CONNECTED) {
@@ -81,14 +96,14 @@ void handleNetworkStuff() {
   }
 }
 
-void pushNetworkPacket(Packet* packet) {
-  buffer.enqueue(packet);
+void pushNetMessage(NetMessageOut* msg) {
+  xQueueSend( messageQueue, &msg, xBlockTime );
 }
 
 void makeNetworkPacket(NetMessageOut* msg) {
   Packet* p = new Packet();
   p->length = buf->messageOutToByteArray(p->data, msg);
-  pushNetworkPacket(p);
+  buffer.enqueue(p);
 }
 
 bool isConnected() {
@@ -126,11 +141,9 @@ void processMessage(NetMessageIn* msg) {
       break;
   }
 }
-  
-
-TaskHandle_t loopTaskHandle = NULL;
 
 void startNetworkHandlerTask() {
+  messageQueue = xQueueCreate( 5, sizeof( NetMessageOut* ) );
   xTaskCreateUniversal(networkHandlerLoop, "NetworkLoop", 16000, NULL, 0, &loopTaskHandle, CONFIG_ARDUINO_RUNNING_CORE);
 }
 

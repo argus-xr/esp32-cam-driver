@@ -12,7 +12,7 @@ namespace NH {
   
   void handleNetworkStuff();
   
-  void pushNetworkPacket(Packet* packet);
+  void pushNetMessage(NetMessageOut* msg);
   void makeNetworkPacket(NetMessageOut* msg);
   bool isConnected();
 
