@@ -122,7 +122,7 @@ void processMessage(NetMessageIn* msg) {
   switch(type) {
     case 0:
       std::string text = msg->readVarString();
-      Serial.printf("Message: %s", text.c_str());
+      Serial.printf("Message: %s\n", text.c_str());
       break;
   }
 }

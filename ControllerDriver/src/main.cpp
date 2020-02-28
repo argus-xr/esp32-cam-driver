@@ -17,7 +17,7 @@ void setup() {
 
   NetMessageOut* msg = new NetMessageOut(6);
   msg->writeuint8(0);
-  msg->writeVarString("Test");
+  msg->writeVarString("Test\\Hello!");
   NH::makeNetworkPacket(msg);
   delete msg;
 
