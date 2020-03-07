@@ -6,7 +6,14 @@
 namespace CH {
 
     void startCameraHandlerTask();
-    void cameraHandlerLoop(void *pvParameters);
+    void cameraHandlerTask(void *pvParameters);
+
+    bool getMutex();
+    void giveMutex();
+
+    void initCamera();
+    void send_buf(uint8_t* buf, size_t buf_len);
+    esp_err_t bmp_handler();
 
 }
 

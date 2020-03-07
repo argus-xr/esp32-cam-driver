@@ -21,7 +21,9 @@ namespace NH {
   void processMessage(NetMessageIn* msg);
 
   void startNetworkHandlerTask();
-  void networkHandlerLoop(void *pvParameters);
+  void networkHandlerTask(void *pvParameters);
+
+  esp_err_t bmp_handler();
 }
 
 #endif

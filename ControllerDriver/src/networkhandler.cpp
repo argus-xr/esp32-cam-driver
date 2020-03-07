@@ -24,7 +24,7 @@ uint8_t readBuf[readBufferSize];
 
 BasicMessageBuffer* buf = new BasicMessageBuffer();
 
-TaskHandle_t loopTaskHandle = NULL;
+TaskHandle_t networkTaskHandle = NULL;
 QueueHandle_t messageQueue = NULL;
 const TickType_t xBlockTime = pdMS_TO_TICKS( 200 );
 
@@ -144,10 +144,10 @@ void processMessage(NetMessageIn* msg) {
 
 void startNetworkHandlerTask() {
   messageQueue = xQueueCreate( 5, sizeof( NetMessageOut* ) );
-  xTaskCreateUniversal(networkHandlerLoop, "NetworkLoop", 16000, NULL, 0, &loopTaskHandle, CONFIG_ARDUINO_RUNNING_CORE);
+  xTaskCreateUniversal(networkHandlerTask, "NetworkTask", 16000, NULL, 0, &networkTaskHandle, CONFIG_ARDUINO_RUNNING_CORE);
 }
 
-void networkHandlerLoop(void *pvParameters) {
+void networkHandlerTask(void *pvParameters) {
   while(true) {
     handleNetworkStuff();
     delay(1);
