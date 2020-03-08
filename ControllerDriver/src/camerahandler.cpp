@@ -125,19 +125,21 @@ namespace CH {
     }
 
     void send_buf(uint8_t* buf, size_t buf_len) {
+        Serial.printf("Start send_buf.\n");
         uint8_t varIntLength = ArgusNetUtils::bytesToFitVarInt(buf_len);
-        NetMessageOut* msg = new NetMessageOut(buf_len * 2 + varIntLength + 1); // +1 for message type length. buf_len * 2 because of a reallocation bug. TODO: Fix the reallocation code.
+        Serial.printf("send_buf line 2\n");
+        Serial.printf("%d %d\n", buf_len, varIntLength);
+        NetMessageOut* msg = new NetMessageOut(buf_len + varIntLength + 1 + 200); // +1 for message type length. buf_len * 2 because of a reallocation bug. TODO: Fix the reallocation code.
+        Serial.printf("send_buf line 3\n");
         msg->writeVarInt(1);
+        Serial.printf("send_buf line 4\n");
         msg->writeVarInt(buf_len);
         Serial.printf("Binary blob size: %d, VarInt length: %d.\n", buf_len, varIntLength);
         Serial.printf("Before writing binary blob, length: %d.\n", msg->getContentLength());
         Serial.printf("Available heap space: %d.\n", esp_get_minimum_free_heap_size());
         delay(1);
-        uint8_t* copyTestBuf = new uint8_t[buf_len];
-        memcpy(copyTestBuf, buf, buf_len);
-        delete[] copyTestBuf;
-        //msg->writeByteBlob(buf, buf_len > 25000? 25000 : buf_len);
         Serial.printf("Available heap space: %d.\n", esp_get_minimum_free_heap_size());
+        //msg->writeByteBlob(buf, buf_len > 400? 400 : buf_len);
         msg->writeByteBlob(buf, buf_len);
         Serial.printf("After writing binary blob, length: %d.\n", msg->getContentLength());
         NH::pushNetMessage(msg);
