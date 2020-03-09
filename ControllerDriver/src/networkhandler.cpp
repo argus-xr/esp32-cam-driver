@@ -6,6 +6,10 @@
 //#include "utility/util.h"
 #include "camerahandler.h" // to enable/disable recording.
 
+#ifdef NETUSEWPA2ENTERPRISE
+#include "esp_wpa2.h"
+#endif
+
 namespace NH {
   
 const char* ssid     = NETSSID;
@@ -35,6 +39,14 @@ void handleNetworkStuff() {
         wStatus = WiFi.status();
 
         if (wStatus != WL_CONNECTED && wStatus != WL_IDLE_STATUS) {
+            #ifdef NETUSEWPA2ENTERPRISE
+                WiFi.disconnect(true);
+                esp_wifi_sta_wpa2_ent_set_identity((uint8_t *)NETWPA2ENTID, strlen(NETWPA2ENTID));
+                esp_wifi_sta_wpa2_ent_set_username((uint8_t *)NETWPA2ENDUSER, strlen(NETWPA2ENDUSER));
+                esp_wifi_sta_wpa2_ent_set_password((uint8_t *)NETPASS, strlen(NETPASS));
+                esp_wpa2_config_t config = WPA2_CONFIG_INIT_DEFAULT();
+                esp_wifi_sta_wpa2_ent_enable(&config);
+            #endif
             WiFi.begin(ssid, password);
             Serial.print("Current status: ");
             Serial.print(wStatus);
