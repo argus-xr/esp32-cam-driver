@@ -4,6 +4,7 @@
 #include "networkconfig.h"
 #include "main.h"
 //#include "utility/util.h"
+#include "camerahandler.h" // to enable/disable recording.
 
 namespace NH {
   
@@ -90,6 +91,7 @@ void handleNetworkStuff() {
         }
       }
     }
+    CH::setRecordVideo(isConnected());
   } catch (std::exception e) {
     Serial.print("Exception in network handler: ");
     Serial.println(e.what());
@@ -107,7 +109,7 @@ void makeNetworkPacket(NetMessageOut* msg) {
 }
 
 bool isConnected() {
-  return (wStatus == WL_CONNECTED);
+  return (wStatus == WL_CONNECTED && client.connected());
 }
 
 void checkMessages() {

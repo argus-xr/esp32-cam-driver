@@ -8,6 +8,9 @@ namespace CH {
     void startCameraHandlerTask();
     void cameraHandlerTask(void *pvParameters);
 
+    void setRecordVideo(bool record);
+    bool getRecordVideo();
+
     bool getMutex();
     void giveMutex();
 

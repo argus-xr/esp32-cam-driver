@@ -8,12 +8,15 @@
 
 #include "argus-netbuffer/BasicMessageProtocol/BasicMessageProtocol.h"
 #include "argus-netbuffer/netutils.h"
+#include <atomic>
 
 namespace CH {
 
     SemaphoreHandle_t semaphore = NULL;
 
     TaskHandle_t cameraTaskHandle = NULL;
+    std::atomic_bool recordVideo;
+
     void startCameraHandlerTask() {  
         xTaskCreateUniversal(cameraHandlerTask, "CameraHandler", 16000, NULL, 0, &cameraTaskHandle, CONFIG_ARDUINO_RUNNING_CORE);
     }
@@ -21,12 +24,25 @@ namespace CH {
     void cameraHandlerTask(void *pvParameters) {
         semaphore = xSemaphoreCreateMutex();
 
+        recordVideo.store(false);
         initCamera();
 
         while(true) {
-            bmp_handler();
-            delay(5000);
+            if(getRecordVideo()) {
+                bmp_handler();
+            } else {
+                delay(10);
+            }
+            delay(100);
         }
+    }
+    
+    void setRecordVideo(bool record) {
+        recordVideo.store(record);
+    }
+
+    bool getRecordVideo() {
+        return recordVideo;
     }
 
     bool getMutex() {
