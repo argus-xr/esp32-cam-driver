@@ -11,10 +11,6 @@
 #endif
 
 namespace NH {
-  
-const char* ssid     = NETSSID;
-const char* password = NETPASS;
-const char* host = NETHOST;
 
 const int serverPort = 11000;
 
@@ -46,12 +42,14 @@ void handleNetworkStuff() {
                 esp_wifi_sta_wpa2_ent_set_password((uint8_t *)NETPASS, strlen(NETPASS));
                 esp_wpa2_config_t config = WPA2_CONFIG_INIT_DEFAULT();
                 esp_wifi_sta_wpa2_ent_enable(&config);
+                WiFi.begin(NETSSID);
+            #else
+                WiFi.begin(NETSSID, NETPASS);
             #endif
-            WiFi.begin(ssid, password);
             Serial.print("Current status: ");
             Serial.print(wStatus);
             Serial.print(". Reconnecting to ");
-            Serial.println(ssid);
+            Serial.println(NETSSID);
             delay(500);
         }
 
@@ -93,13 +91,13 @@ void handleNetworkStuff() {
                     Serial.println(e.what());
                 }
             } else {
-                if (client.connect(host, serverPort)) {
+                if (client.connect(NETHOST, serverPort)) {
                     Serial.print("Connected to ");
-                    Serial.println(host);
+                    Serial.println(NETHOST);
                     client.setNoDelay(true); // consider setSync(true): flushes each write, slower but does not allocate temporary memory.
                 } else {
                     Serial.print("Failed to connect to ");
-                    Serial.println(host);
+                    Serial.println(NETHOST);
                 }
             }
         }
