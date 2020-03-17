@@ -95,6 +95,7 @@ namespace CH {
         }
         
         sensor_t * s = esp_camera_sensor_get();
+        s->set_colorbar(s, 1);
         //initial sensors are flipped vertically and colors are a bit saturated
         if (s->id.PID == OV3660_PID) {
             s->set_vflip(s, 1);//flip it back
@@ -109,11 +110,9 @@ namespace CH {
     esp_err_t bmp_handler() {
         camera_fb_t * fb = NULL;
         esp_err_t res = ESP_OK;
-        //int64_t fr_start = esp_timer_get_time();
 
         fb = esp_camera_fb_get();
         if (!fb) {
-            ESP_LOGE(TAG, "Camera capture failed");
             Serial.println("Camera capture failed");
             return ESP_FAIL;
         }
@@ -124,7 +123,6 @@ namespace CH {
         bool converted = frame2jpg(fb, 0, &buf, &buf_len);
         esp_camera_fb_return(fb);
         if(!converted){
-            ESP_LOGE(TAG, "BMP conversion failed");
             Serial.println("BMP conversion failed");
             return ESP_FAIL;
         }
@@ -135,8 +133,6 @@ namespace CH {
 
         send_buf(buf, buf_len);
         free(buf);
-        //int64_t fr_end = esp_timer_get_time();
-        ESP_LOGI(TAG, "BMP: %uKB %ums", (uint32_t)(buf_len/1024), (uint32_t)((fr_end - fr_start)/1000));
         return res;
     }
 

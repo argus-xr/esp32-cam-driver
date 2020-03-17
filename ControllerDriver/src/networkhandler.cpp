@@ -12,12 +12,6 @@
 
 namespace NH {
 
-const char* netSSID = NETSSID;
-const char* netPass = NETPASS;
-const char* netIdent = NETWPA2ENTID;
-const char* netUser = NETWPA2ENTUSER;
-const char* netHost = NETHOST;
-
 const int serverPort = 11000;
 
 // Use WiFiClient class to create TCP connections
@@ -43,9 +37,9 @@ void handleNetworkStuff() {
         if (wStatus != WL_CONNECTED && wStatus != WL_IDLE_STATUS) {
             #ifdef NETUSEWPA2ENTERPRISE
                 WiFi.disconnect(true);
-                esp_wifi_sta_wpa2_ent_set_identity((uint8_t *)netIdent, strlen(netIdent));
-                esp_wifi_sta_wpa2_ent_set_username((uint8_t *)netUser, strlen(netUser));
-                esp_wifi_sta_wpa2_ent_set_password((uint8_t *)netPass, strlen(netPass));
+                esp_wifi_sta_wpa2_ent_set_identity((uint8_t *)NETWPA2ENTID, strlen(NETWPA2ENTID));
+                esp_wifi_sta_wpa2_ent_set_username((uint8_t *)NETWPA2ENTUSER, strlen(NETWPA2ENTUSER));
+                esp_wifi_sta_wpa2_ent_set_password((uint8_t *)NETPASS, strlen(NETPASS));
                 Serial.println("Set enterprise username/pass/ident");
                 delay(50);
                 esp_wpa2_config_t config = WPA2_CONFIG_INIT_DEFAULT();
@@ -55,14 +49,14 @@ void handleNetworkStuff() {
                 esp_wifi_sta_wpa2_ent_enable(&config);
                 Serial.println("Loaded enterprise config");
                 delay(50);
-                WiFi.begin(netSSID);
+                WiFi.begin(NETSSID);
             #else
-                WiFi.begin(netSSID, netPass);
+                WiFi.begin(NETSSID, NETPASS);
             #endif
             Serial.print("Current status: ");
             Serial.print(wStatus);
             Serial.print(". Reconnecting to ");
-            Serial.println(netSSID);
+            Serial.println(NETSSID);
             delay(1000);
         }
 
