@@ -57,7 +57,7 @@ void handleNetworkStuff() {
             Serial.print(wStatus);
             Serial.print(". Reconnecting to ");
             Serial.println(NETSSID);
-            delay(1000);
+            delay(5000);
         }
 
         if(messageQueue != NULL) {

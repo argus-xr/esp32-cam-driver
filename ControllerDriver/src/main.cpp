@@ -8,8 +8,9 @@ void setup() {
     try {
         delay(2000);
         Serial.begin(115200);
-
+        delay(1000);
         NH::startNetworkHandlerTask();
+        delay(1000);
         CH::startCameraHandlerTask();
     } catch(std::exception e) {
         Serial.printf("Exception in setup(): %s", e.what());

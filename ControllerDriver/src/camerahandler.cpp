@@ -33,7 +33,7 @@ namespace CH {
             } else {
                 delay(10);
             }
-            delay(100);
+            delay(1000);
         }
     }
     
@@ -80,7 +80,7 @@ namespace CH {
         config.pin_pwdn = PWDN_GPIO_NUM;
         config.pin_reset = RESET_GPIO_NUM;
         config.xclk_freq_hz = 20000000;
-        config.jpeg_quality = 0; // lower is higher quality.
+        config.jpeg_quality = 20; // lower is higher quality.
         config.pixel_format = PIXFORMAT_JPEG;
         //config.pixel_format = PIXFORMAT_RGB888;
         //init with high specs to pre-allocate larger buffers
@@ -104,7 +104,7 @@ namespace CH {
         }
         //drop down frame size for higher initial frame rate
         //s->set_framesize(s, FRAMESIZE_QVGA);
-        s->set_framesize(s, FRAMESIZE_QQVGA);
+        //s->set_framesize(s, FRAMESIZE_QQVGA);
     }
 
     esp_err_t bmp_handler() {
@@ -117,22 +117,23 @@ namespace CH {
             return ESP_FAIL;
         }
 
-        uint8_t * buf = NULL;
-        size_t buf_len = 0;
+        //uint8_t * buf = NULL;
+        //size_t buf_len = 0;
         //bool converted = frame2bmp(fb, &buf, &buf_len);
-        bool converted = frame2jpg(fb, 0, &buf, &buf_len);
-        esp_camera_fb_return(fb);
-        if(!converted){
-            Serial.println("BMP conversion failed");
-            return ESP_FAIL;
-        }
+        //bool converted = frame2jpg(fb, 10, &buf, &buf_len);
 
         //res = httpd_resp_set_type(req, "image/x-windows-bmp")
         //   || httpd_resp_set_hdr(req, "Content-Disposition", "inline; filename=capture.bmp")
         //   || httpd_resp_send(req, (const char *)buf, buf_len);
 
-        send_buf(buf, buf_len);
-        free(buf);
+        send_buf(fb->buf, fb->len);
+        //free(buf);
+
+        esp_camera_fb_return(fb);
+        /*if(!converted){
+            Serial.println("BMP conversion failed");
+            return ESP_FAIL;
+        }*/
         return res;
     }
 
