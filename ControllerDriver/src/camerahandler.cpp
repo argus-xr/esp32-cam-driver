@@ -30,10 +30,10 @@ namespace CH {
         while(true) {
             if(getRecordVideo()) {
                 bmp_handler();
+                delay(10000);
             } else {
                 delay(10);
             }
-            delay(1000);
         }
     }
     
@@ -84,7 +84,7 @@ namespace CH {
         config.pixel_format = PIXFORMAT_JPEG;
         //config.pixel_format = PIXFORMAT_RGB888;
         //init with high specs to pre-allocate larger buffers
-        config.frame_size = FRAMESIZE_QVGA;
+        config.frame_size = FRAMESIZE_VGA;
         config.fb_count = 1;
 
         // camera init
@@ -95,7 +95,7 @@ namespace CH {
         }
         
         sensor_t * s = esp_camera_sensor_get();
-        s->set_colorbar(s, 1);
+        //s->set_colorbar(s, 1);
         //initial sensors are flipped vertically and colors are a bit saturated
         if (s->id.PID == OV3660_PID) {
             s->set_vflip(s, 1);//flip it back
@@ -117,46 +117,39 @@ namespace CH {
             return ESP_FAIL;
         }
 
-        //uint8_t * buf = NULL;
-        //size_t buf_len = 0;
-        //bool converted = frame2bmp(fb, &buf, &buf_len);
-        //bool converted = frame2jpg(fb, 10, &buf, &buf_len);
+        /*uint8_t * buf = NULL;
+        size_t buf_len = 0;
+        bool converted = frame2jpg(fb, 0, &buf, &buf_len);
 
-        //res = httpd_resp_set_type(req, "image/x-windows-bmp")
-        //   || httpd_resp_set_hdr(req, "Content-Disposition", "inline; filename=capture.bmp")
-        //   || httpd_resp_send(req, (const char *)buf, buf_len);
-
-        send_buf(fb->buf, fb->len);
-        //free(buf);
+        send_buf(buf, buf_len);
+        free(buf);
 
         esp_camera_fb_return(fb);
-        /*if(!converted){
-            Serial.println("BMP conversion failed");
+        if(!converted){
+            Serial.println("JPG conversion failed");
             return ESP_FAIL;
         }*/
+
+        
+        send_buf(fb->buf, fb->len);
+
+        esp_camera_fb_return(fb);
+
         return res;
     }
 
     void send_buf(uint8_t* buf, size_t buf_len) {
-        Serial.printf("Start send_buf.\n");
+        Serial.printf("Start send_buf. Length: %d\n", buf_len);
         uint8_t varIntLength = ArgusNetUtils::bytesToFitVarInt(buf_len);
         Serial.printf("send_buf line 2\n");
-        Serial.printf("%d %d\n", buf_len, varIntLength);
         NetMessageOut* msg = new NetMessageOut(buf_len + varIntLength + 1 + 200); // +1 for message type length. buf_len * 2 because of a reallocation bug. TODO: Fix the reallocation code.
         Serial.printf("send_buf line 3\n");
         msg->writeVarInt(1);
         Serial.printf("send_buf line 4\n");
         msg->writeVarInt(buf_len);
-        Serial.printf("Binary blob size: %d, VarInt length: %d.\n", buf_len, varIntLength);
-        Serial.printf("Before writing binary blob, length: %d.\n", msg->getContentLength());
-        Serial.printf("Available heap space: %d.\n", esp_get_minimum_free_heap_size());
-        delay(1);
-        Serial.printf("Available heap space: %d.\n", esp_get_minimum_free_heap_size());
-        //msg->writeByteBlob(buf, buf_len > 400? 400 : buf_len);
         msg->writeByteBlob(buf, buf_len);
-        Serial.printf("After writing binary blob, length: %d.\n", msg->getContentLength());
         NH::pushNetMessage(msg);
-        //delete msg;
+        // msg deleted elsewhere
     }
 
 }

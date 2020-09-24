@@ -78,9 +78,17 @@ void handleNetworkStuff() {
                         if (p != nullptr) {
                             if (p->length > 0 && p->data != NULL && p->data != nullptr) {
                                 Serial.println("Sending message.");
-                                int sent = client.write(p->data, p->length);
-                                Serial.print("Bytes sent: ");
-                                Serial.println(sent);
+                                uint16_t bytesSent = 0;
+                                int sent = 0;
+                                do {
+                                    uint16_t bytesLeft = p->length - bytesSent;
+                                    uint8_t* buf = new uint8_t[bytesLeft];
+                                    memcpy(buf, p->data + bytesSent, bytesLeft);
+                                    sent = client.write(buf, bytesLeft);
+                                    Serial.print("Bytes sent: ");
+                                    Serial.println(sent);
+                                    bytesSent += sent;
+                                } while (bytesSent < p->length && sent > 0);
                             }
                             if(p->data != NULL) {
                                 delete[] p->data;
@@ -165,7 +173,7 @@ void processMessage(NetMessageIn* msg) {
 
 void startNetworkHandlerTask() {
     messageQueue = xQueueCreate( 5, sizeof( NetMessageOut* ) );
-    xTaskCreateUniversal(networkHandlerTask, "NetworkTask", 16000, NULL, 0, &networkTaskHandle, CONFIG_ARDUINO_RUNNING_CORE);
+    xTaskCreateUniversal(networkHandlerTask, "NetworkTask", 60000, NULL, 0, &networkTaskHandle, CONFIG_ARDUINO_RUNNING_CORE);
 }
 
 void networkHandlerTask(void *pvParameters) {
