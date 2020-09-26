@@ -13,10 +13,13 @@ void EConfig::initEEPROM() {
 }
 
 void EConfig::setGuid(uint64_t guid) {
+    initEEPROM();
     EEPROM.writeULong64(0, guid);
+    EEPROM.commit();
 }
 
 uint64_t EConfig::getGuid() {
+    initEEPROM();
     if(guid == 0) {
         guid = EEPROM.readULong64(0);
     }

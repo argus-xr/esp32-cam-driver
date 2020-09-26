@@ -3,6 +3,7 @@
 
 #include "netutils.h"
 #include "stdexcept"
+#include "stdio.h"
 
 void NetBuffer::insertBuffer(uint8_t* buffer, uint32_t length, bool copyBuffer) {
 	uint32_t neededSize = length + internalBufferContentSize;
@@ -88,6 +89,29 @@ int32_t NetBuffer::findByteSequence(const uint8_t* sequence, uint32_t sequenceLe
 
 void NetBuffer::setResizeStep(uint32_t step) {
 	bufferResizeStep = step;
+}
+
+std::string NetBuffer::debugBuffer(uint8_t* buffer, uint32_t length) {
+	return debugBuffer(buffer, length, 50);
+}
+
+std::string NetBuffer::debugBuffer(uint8_t* buffer, uint32_t length, uint32_t amount) {
+	uint32_t amountToWrite = length;
+	if(amount < length) {
+		amountToWrite = amount;
+	}
+
+	char* sbuf = new char[amountToWrite * 4];
+	for(int i = 0; i < amountToWrite; ++i) {
+		char num[4];
+		sprintf(num, "%3u", buffer[i]);
+		memcpy(sbuf + i * 4, num, 3);
+		sbuf[i * 4 + 3] = ' ';
+	}
+	sbuf[amountToWrite * 4 - 1] = 0; // replace a space with a null terminator.
+	std::string out = std::string(sbuf);
+	delete[] sbuf;
+	return out;
 }
 
 
@@ -203,6 +227,14 @@ uint32_t NetMessageIn::getInternalBufferLength() {
 	return bufferLength;
 }
 
+std::string NetMessageIn::debugBuffer() {
+	return NetBuffer::debugBuffer(internalBuffer, bufferPos);
+}
+
+std::string NetMessageIn::debugBuffer(uint32_t amount) {
+	return NetBuffer::debugBuffer(internalBuffer, bufferPos, amount);
+}
+
 
 
 // NETMESSAGEOUT
@@ -303,4 +335,12 @@ void NetMessageOut::ensureSpaceFor(uint32_t extraBytes, bool exact) {
 			reserveBufferSize(bufferPos + extraBytes + 128); // reserve some extra to reduce reallocations.
 		}
 	}
+}
+
+std::string NetMessageOut::debugBuffer() {
+	return NetBuffer::debugBuffer(internalBuffer, bufferPos);
+}
+
+std::string NetMessageOut::debugBuffer(uint32_t amount) {
+	return NetBuffer::debugBuffer(internalBuffer, bufferPos, amount);
 }

@@ -83,7 +83,6 @@ void NetworkHandler::handleNetworkStuff() {
                         Packet* p = buffer.pop();
                         if (p != nullptr) {
                             if (p->length > 0 && p->data != NULL && p->data != nullptr) {
-                                Serial.println("Sending message.");
                                 uint16_t bytesSent = 0;
                                 int sent = 0;
                                 do {
@@ -91,8 +90,7 @@ void NetworkHandler::handleNetworkStuff() {
                                     uint8_t* buf = new uint8_t[bytesLeft];
                                     memcpy(buf, p->data + bytesSent, bytesLeft);
                                     sent = client.write(buf, bytesLeft);
-                                    Serial.print("Bytes sent: ");
-                                    Serial.println(sent);
+                                    Serial.printf("Sending %d bytes.\n", sent);
                                     bytesSent += sent;
                                 } while (bytesSent < p->length && sent > 0);
                             }
@@ -191,9 +189,11 @@ void NetworkHandler::processHandshake(NetMessageIn* msg) {
 
 void NetworkHandler::sendHandshake() {
     uint64_t guid = EConfig::getGuid();
-    Serial.printf("Sending handshake - GUID: %llu.\n", guid);
     NetMessageOut* msg = new NetMessageOut(10);
+    msg->writeVarInt((uint64_t) CTSMessageType::Handshake);
     msg->writeVarInt(guid);
+    std::string contents = msg->debugBuffer();
+    Serial.printf("Sending handshake - GUID: %llu, contents: %s.\n", guid, contents.c_str());
     pushNetMessage(msg);
 }
 
