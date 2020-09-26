@@ -10,25 +10,52 @@ namespace NH {
         uint8_t* data;
         uint32_t length;
     };
-    
-    void handleNetworkStuff();
-    
-    void pushNetMessage(NetMessageOut* msg);
-    void makeNetworkPacket(NetMessageOut* msg);
-    bool isConnected();
 
-    void checkMessages();
-    
-    void processMessage(NetMessageIn* msg);
+    enum class CTSMessageType { // client to server
+        Handshake,
+        GUIDResponse,
+        VideoData = 20,
+        IMUData,
+        Debug = 10000,
+    };
+
+    enum class STCMessageType { // server to client
+        Handshake,
+        SetGUID,
+        Debug = 10000,
+    };
+
+    class NetworkHandler {
+        protected:
+        static NetworkHandler* inst;
+
+        public:
+        static NetworkHandler* getInstance();
+        
+        void handleNetworkStuff();
+        
+        void pushNetMessage(NetMessageOut* msg);
+        void makeNetworkPacket(NetMessageOut* msg);
+        bool isConnected();
+
+        void checkMessages();
+        
+        void processMessage(NetMessageIn* msg);
+
+        esp_err_t bmp_handler();
+
+        void processHandshake(NetMessageIn* msg);
+
+        void sendHandshake();
+
+        void processDebug(NetMessageIn* msg);
+        
+        void processSetGUID(NetMessageIn* msg);
+            
+    };
 
     void startNetworkHandlerTask();
     void networkHandlerTask(void *pvParameters);
-
-    esp_err_t bmp_handler();
-
-    class NetworkHandler {
-        
-    };
 }
 
 #endif

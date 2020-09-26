@@ -5,12 +5,18 @@
 #include "main.h"
 //#include "utility/util.h"
 #include "camerahandler.h" // to enable/disable recording.
+#include "EEPROMConfig.h"
 
 #ifdef NETUSEWPA2ENTERPRISE
 #include "esp_wpa2.h"
 #endif
 
 namespace NH {
+
+NetworkHandler* NetworkHandler::inst = new NetworkHandler();
+NetworkHandler* NetworkHandler::getInstance() {
+    return inst;
+}
 
 const int serverPort = 11000;
 
@@ -30,7 +36,7 @@ QueueHandle_t messageQueue = NULL;
 const TickType_t xBlockTime = pdMS_TO_TICKS( 200 );
 
 
-void handleNetworkStuff() {
+void NetworkHandler::handleNetworkStuff() {
     try {
         wStatus = WiFi.status();
 
@@ -41,14 +47,14 @@ void handleNetworkStuff() {
                 esp_wifi_sta_wpa2_ent_set_username((uint8_t *)NETWPA2ENTUSER, strlen(NETWPA2ENTUSER));
                 esp_wifi_sta_wpa2_ent_set_password((uint8_t *)NETPASS, strlen(NETPASS));
                 Serial.println("Set enterprise username/pass/ident");
-                delay(50);
+                vTaskDelay(pdMS_TO_TICKS( 50 ));
                 esp_wpa2_config_t config = WPA2_CONFIG_INIT_DEFAULT();
                 Serial.println("Created default enterprise config");
-                delay(50);
+                vTaskDelay(pdMS_TO_TICKS( 50 ));
                 WiFi.mode(WIFI_STA);
                 esp_wifi_sta_wpa2_ent_enable(&config);
                 Serial.println("Loaded enterprise config");
-                delay(50);
+                vTaskDelay(pdMS_TO_TICKS( 50 ));
                 WiFi.begin(NETSSID);
             #else
                 WiFi.begin(NETSSID, NETPASS);
@@ -57,7 +63,7 @@ void handleNetworkStuff() {
             Serial.print(wStatus);
             Serial.print(". Reconnecting to ");
             Serial.println(NETSSID);
-            delay(5000);
+            vTaskDelay(pdMS_TO_TICKS( 5000 ));
         }
 
         if(messageQueue != NULL) {
@@ -125,21 +131,21 @@ void handleNetworkStuff() {
     }
 }
 
-void pushNetMessage(NetMessageOut* msg) {
+void NetworkHandler::pushNetMessage(NetMessageOut* msg) {
     xQueueSend( messageQueue, &msg, xBlockTime );
 }
 
-void makeNetworkPacket(NetMessageOut* msg) {
+void NetworkHandler::makeNetworkPacket(NetMessageOut* msg) {
     Packet* p = new Packet();
     p->length = buf->messageOutToByteArray(p->data, msg);
     buffer.enqueue(p);
 }
 
-bool isConnected() {
+bool NetworkHandler::isConnected() {
     return (wStatus == WL_CONNECTED && client.connected());
 }
 
-void checkMessages() {
+void NetworkHandler::checkMessages() {
     while (client.available()) {
         int bytes = client.read(readBuf, readBufferSize);
         if (bytes <= 0) {
@@ -152,34 +158,66 @@ void checkMessages() {
     NetMessageIn* msg = nullptr;
     do {
         msg = buf->popMessage();
-        if(msg != nullptr) {
+        if(msg) {
             processMessage(msg);
         }
         delete msg;
-    } while(msg != nullptr);
+    } while(msg);
 }
 
-void processMessage(NetMessageIn* msg) {
-    uint8_t type = msg->readVarInt();
+void NetworkHandler::processMessage(NetMessageIn* msg) {
+    STCMessageType type = (STCMessageType) msg->readVarInt();
     Serial.println("Message received.");
-    Serial.printf("Length: %d, type: %d.\n", msg->getInternalBufferLength(), type);
+    Serial.printf("Length: %d, type: %lld.\n", msg->getInternalBufferLength(), (uint64_t) type);
     switch(type) {
-        case 0:
-            std::string text = msg->readVarString();
-            Serial.printf("Message: %s\n", text.c_str());
+        case STCMessageType::Handshake:
+            processHandshake(msg);
+            break;
+        case STCMessageType::SetGUID:
+            processSetGUID(msg);
+            break;
+        case STCMessageType::Debug:
+            processDebug(msg);
+            break;
+        default:
             break;
     }
 }
 
+void NetworkHandler::processHandshake(NetMessageIn* msg) {
+    Serial.printf("Processing handshake.\n");
+    sendHandshake();
+}
+
+void NetworkHandler::sendHandshake() {
+    uint64_t guid = EConfig::getGuid();
+    Serial.printf("Sending handshake - GUID: %llu.\n", guid);
+    NetMessageOut* msg = new NetMessageOut(10);
+    msg->writeVarInt(guid);
+    pushNetMessage(msg);
+}
+
+void NetworkHandler::processDebug(NetMessageIn* msg) {
+    std::string text = msg->readVarString();
+    Serial.printf("Message: %s\n", text.c_str());
+}
+
+void NetworkHandler::processSetGUID(NetMessageIn* msg) {
+    uint64_t newGUID = msg->readVarInt(); // can't read/write uint64_t right now
+    EConfig::setGuid(newGUID);
+    Serial.printf("Processing SetGUID - GUID: %llu.\n", newGUID);
+}
+
 void startNetworkHandlerTask() {
     messageQueue = xQueueCreate( 5, sizeof( NetMessageOut* ) );
-    xTaskCreateUniversal(networkHandlerTask, "NetworkTask", 60000, NULL, 0, &networkTaskHandle, CONFIG_ARDUINO_RUNNING_CORE);
+
+    xTaskCreatePinnedToCore(&networkHandlerTask, "NetworkTask", 60000, NULL, 0, &networkTaskHandle, tskNO_AFFINITY);
 }
 
 void networkHandlerTask(void *pvParameters) {
     while(true) {
-        handleNetworkStuff();
-        delay(1);
+        NetworkHandler::getInstance()->handleNetworkStuff();
+        vTaskDelay(pdMS_TO_TICKS( 10 ));
     }
 }
 

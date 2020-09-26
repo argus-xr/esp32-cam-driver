@@ -18,7 +18,7 @@ namespace CH {
     std::atomic_bool recordVideo;
 
     void startCameraHandlerTask() {  
-        xTaskCreateUniversal(cameraHandlerTask, "CameraHandler", 16000, NULL, 0, &cameraTaskHandle, CONFIG_ARDUINO_RUNNING_CORE);
+        xTaskCreateUniversal(cameraHandlerTask, "CameraHandler", 16000, NULL, 0, &cameraTaskHandle, tskNO_AFFINITY);
     }
 
     void cameraHandlerTask(void *pvParameters) {
@@ -30,9 +30,9 @@ namespace CH {
         while(true) {
             if(getRecordVideo()) {
                 bmp_handler();
-                delay(10000);
+                vTaskDelay(pdMS_TO_TICKS( 2000 ));
             } else {
-                delay(10);
+                vTaskDelay(pdMS_TO_TICKS( 10 ));
             }
         }
     }
@@ -84,7 +84,7 @@ namespace CH {
         config.pixel_format = PIXFORMAT_JPEG;
         //config.pixel_format = PIXFORMAT_RGB888;
         //init with high specs to pre-allocate larger buffers
-        config.frame_size = FRAMESIZE_VGA;
+        config.frame_size = FRAMESIZE_QVGA;
         config.fb_count = 1;
 
         // camera init
@@ -144,11 +144,11 @@ namespace CH {
         Serial.printf("send_buf line 2\n");
         NetMessageOut* msg = new NetMessageOut(buf_len + varIntLength + 1 + 200); // +1 for message type length. buf_len * 2 because of a reallocation bug. TODO: Fix the reallocation code.
         Serial.printf("send_buf line 3\n");
-        msg->writeVarInt(1);
+        msg->writeVarInt((uint64_t) NH::CTSMessageType::VideoData);
         Serial.printf("send_buf line 4\n");
         msg->writeVarInt(buf_len);
         msg->writeByteBlob(buf, buf_len);
-        NH::pushNetMessage(msg);
+        NH::NetworkHandler::getInstance()->pushNetMessage(msg);
         // msg deleted elsewhere
     }
 

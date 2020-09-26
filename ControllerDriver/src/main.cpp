@@ -6,11 +6,11 @@
 
 void setup() {
     try {
-        delay(2000);
+        vTaskDelay(pdMS_TO_TICKS( 2000 ));
         Serial.begin(115200);
-        delay(1000);
+        vTaskDelay(pdMS_TO_TICKS( 1000 ));
         NH::startNetworkHandlerTask();
-        delay(1000);
+        vTaskDelay(pdMS_TO_TICKS( 1000 ));
         CH::startCameraHandlerTask();
     } catch(std::exception e) {
         Serial.printf("Exception in setup(): %s", e.what());
@@ -18,5 +18,4 @@ void setup() {
 }
 
 void loop() {
-    delay(1000);
 }
