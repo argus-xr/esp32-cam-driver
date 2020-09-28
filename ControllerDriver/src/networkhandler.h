@@ -3,9 +3,13 @@
 
 #include <Arduino.h>
 #include "argus-netbuffer/BasicMessageProtocol/BasicMessageProtocol.h"
+#include <WiFi.h>
 
 
 namespace NH {
+	void* myMalloc(uint64_t size);
+	void myFree(void* ptr);
+
     struct Packet {
         uint8_t* data;
         uint32_t length;
@@ -51,11 +55,18 @@ namespace NH {
         void processDebug(NetMessageIn* msg);
         
         void processSetGUID(NetMessageIn* msg);
-            
+        
+        static NetMessageOut* newMessage(CTSMessageType type, uint64_t length);
     };
 
     void startNetworkHandlerTask();
     void networkHandlerTask(void *pvParameters);
+
+    void initWifi();
+    void wifiConnect();
+    void onWifiConnect(WiFiEvent_t event, WiFiEventInfo_t info);
+    void onWifiReady(WiFiEvent_t event, WiFiEventInfo_t info);
+    void tcpConnect();
 }
 
 #endif

@@ -4,13 +4,57 @@
 #include "netutils.h"
 #include "stdexcept"
 #include "stdio.h"
+#include "stdlib.h"
+
+namespace NetBufferDefaultMalloc {
+	void* myMalloc(uint64_t size) {
+		return malloc(size);
+	}
+	void myFree(void* ptr) {
+		free(ptr);
+	}
+}
+
+OutPacket::OutPacket(uint8_t* inData, uint32_t inLength, void freeFunc(void* ptr)) {
+	data = inData;
+	myFree = freeFunc;
+}
+
+OutPacket::~OutPacket() {
+	myFree(data);
+}
+
+uint32_t OutPacket::getDataLength() {
+	return length;
+}
+
+uint8_t* OutPacket::getData() {
+	return data;
+}
+
+NetBuffer::NetBuffer() {
+	myMalloc = NetBufferDefaultMalloc::myMalloc;
+	myFree = NetBufferDefaultMalloc::myFree;
+}
+
+NetBuffer::NetBuffer(void* (*mallocFunction)(uint64_t), void (*freeFunction)(void*)) {
+	myMalloc = mallocFunction;
+	myFree = freeFunction;
+}
+
+NetBuffer::~NetBuffer() {
+	if(internalBuffer) {
+		myFree(internalBuffer);
+		internalBuffer = nullptr;
+	}
+}
 
 void NetBuffer::insertBuffer(uint8_t* buffer, uint32_t length, bool copyBuffer) {
 	uint32_t neededSize = length + internalBufferContentSize;
 	if (internalBuffer == nullptr || neededSize > internalBufferMemorySize) {
 		uint8_t* oldBuffer = internalBuffer;
 		uint32_t newSize = neededSize + bufferResizeStep;
-		internalBuffer = new uint8_t[newSize];
+		internalBuffer = (uint8_t*) myMalloc(newSize);
 		if (oldBuffer != nullptr) {
 			std::memcpy(internalBuffer, oldBuffer, internalBufferContentSize);
 		}
@@ -32,7 +76,7 @@ void NetBuffer::removeStartOfBuffer(uint32_t length) {
 		return;
 	}
 	else if (length >= internalBufferContentSize) {
-		delete[] internalBuffer;
+		myFree(internalBuffer);
 		internalBuffer = nullptr;
 		internalBufferContentSize = 0;
 		internalBufferMemorySize = 0;
@@ -43,7 +87,7 @@ void NetBuffer::removeStartOfBuffer(uint32_t length) {
 		internalBufferContentSize = internalBufferContentSize - length; // don't need the old values anymore.
 		internalBufferMemorySize = internalBufferContentSize + bufferResizeStep;
 
-		internalBuffer = new uint8_t[internalBufferMemorySize];
+		internalBuffer = (uint8_t*) myMalloc(internalBufferMemorySize);
 		std::memcpy(internalBuffer, oldBuffer + length, internalBufferContentSize);
 	}
 }
@@ -118,14 +162,23 @@ std::string NetBuffer::debugBuffer(uint8_t* buffer, uint32_t length, uint32_t am
 
 // NETMESSAGEIN
 
+NetMessageIn::NetMessageIn(uint8_t* buffer, uint32_t length, void* (*mallocFunction)(uint64_t), void (*freeFunction)(void*)) {
+	myMalloc = mallocFunction;
+	myFree = freeFunction;
+	internalBuffer = buffer;
+	bufferLength = length;
+}
+
 NetMessageIn::NetMessageIn(uint8_t* buffer, uint32_t length) {
+	myMalloc = NetBufferDefaultMalloc::myMalloc;
+	myFree = NetBufferDefaultMalloc::myFree;
 	internalBuffer = buffer;
 	bufferLength = length;
 }
 
 NetMessageIn::~NetMessageIn() {
 	if(internalBuffer != nullptr) {
-		delete[] internalBuffer;
+		myFree(internalBuffer);
 		internalBuffer = nullptr;
 	}
 }
@@ -239,20 +292,35 @@ std::string NetMessageIn::debugBuffer(uint32_t amount) {
 
 // NETMESSAGEOUT
 
-NetMessageOut::NetMessageOut(uint32_t length) {
+NetMessageOut::NetMessageOut(uint32_t length, void* (*mallocFunction)(uint64_t), void (*freeFunction)(void*)) {
+	myMalloc = mallocFunction;
+	myFree = freeFunction;
 	if (length > 0) {
-		internalBuffer = new uint8_t[length];
+		internalBuffer = (uint8_t*) myMalloc(length);
 		bufferLength = length;
 	}
 	else {
-		internalBuffer = new uint8_t[128]; // no dealing with null pointers.
+		internalBuffer = (uint8_t*) myMalloc(128); // no dealing with null pointers.
+		bufferLength = 128;
+	}
+}
+
+NetMessageOut::NetMessageOut(uint32_t length) {
+	myMalloc = NetBufferDefaultMalloc::myMalloc;
+	myFree = NetBufferDefaultMalloc::myFree;
+	if (length > 0) {
+		internalBuffer = (uint8_t*) myMalloc(length);
+		bufferLength = length;
+	}
+	else {
+		internalBuffer = (uint8_t*) myMalloc(128); // no dealing with null pointers.
 		bufferLength = 128;
 	}
 }
 
 NetMessageOut::~NetMessageOut() {
 	if(internalBuffer != nullptr) {
-		delete[] internalBuffer;
+		myFree(internalBuffer);
 		internalBuffer = nullptr;
 	}
 }
@@ -319,10 +387,10 @@ uint32_t NetMessageOut::getContentLength() {
 void NetMessageOut::reserveBufferSize(uint32_t requiredLength) {
 	if (requiredLength > bufferLength) {
 		uint8_t* tmp = internalBuffer;
-		internalBuffer = new uint8_t[requiredLength];
+		internalBuffer = (uint8_t*) myMalloc(requiredLength);
 		std::memcpy(internalBuffer, tmp, bufferPos);
 		bufferLength = requiredLength;
-		delete[] tmp;
+		myFree(tmp);
 	}
 }
 

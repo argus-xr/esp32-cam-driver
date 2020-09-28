@@ -5,9 +5,12 @@
 
 class BasicMessageBuffer : public NetBuffer {
 public:
+	BasicMessageBuffer();
+	BasicMessageBuffer(void* (*mallocFunction)(uint64_t), void (*freeFunction)(void*));
+	~BasicMessageBuffer();
 	void checkMessages();
 	NetMessageIn* popMessage();
-	uint32_t messageOutToByteArray(uint8_t* &outBuf, NetMessageOut* msg);
+	OutPacket* messageToOutPacket(NetMessageOut* msg);
 	
 	const uint8_t startSequence[2] = { '\\', 0 };
 	const uint32_t startSequenceLength = 2;

@@ -4,6 +4,18 @@
 #include "argus-netbuffer/netutils.h"
 #include <limits.h>
 
+
+BasicMessageBuffer::BasicMessageBuffer()
+		: NetBuffer() {
+}
+
+BasicMessageBuffer::BasicMessageBuffer(void* (*mallocFunction)(uint64_t), void (*freeFunction)(void*))
+		: NetBuffer(mallocFunction, freeFunction) {
+}
+
+BasicMessageBuffer::~BasicMessageBuffer() {
+}
+
 void BasicMessageBuffer::checkMessages() {
 	if (messageListNum < 250) { // don't overflow the message array
 		int32_t pos = findByteSequence(startSequence, startSequenceLength, 0);
@@ -38,7 +50,7 @@ void BasicMessageBuffer::checkMessages() {
 					}
 					messageLength -= offset; // actual message length without escapes.
 					if (messageLength == length) {
-						NetMessageIn* newMessage = new NetMessageIn(nmbuf, messageLength);
+						NetMessageIn* newMessage = new NetMessageIn(nmbuf, messageLength, myMalloc, myFree);
 						if (messageList == nullptr || messageListNum >= messageListMax) {
 							resizeMessageList(messageListMax + 10);
 						}
@@ -73,7 +85,7 @@ NetMessageIn* BasicMessageBuffer::popMessage() {
 	return nullptr;
 }
 
-uint32_t BasicMessageBuffer::messageOutToByteArray(uint8_t* &outBuf, NetMessageOut* msg) {
+OutPacket* BasicMessageBuffer::messageToOutPacket(NetMessageOut* msg) {
 	uint32_t pSize = msg->getContentLength();
 	uint8_t varIntSize = msg->bytesToFitVarInt(pSize);
 	uint8_t* varIntBuf = new uint8_t[varIntSize];
@@ -98,7 +110,7 @@ uint32_t BasicMessageBuffer::messageOutToByteArray(uint8_t* &outBuf, NetMessageO
 	if (outBufSize > ULONG_MAX) {
 		return 0; // message size has to fit in uint32_t. Throw something?
 	}
-	outBuf = new uint8_t[outBufSize];
+	uint8_t* outBuf = (uint8_t*) myMalloc(outBufSize);
 
 	extra = 0; // now using this to track the offset from escape characters.
 	for(int i = 0; i < startSequenceLength; ++i) {
@@ -130,7 +142,9 @@ uint32_t BasicMessageBuffer::messageOutToByteArray(uint8_t* &outBuf, NetMessageO
 		outBuf[start + i + extra] = endSequence[i];
 	}
 
-	return outBufSize; // actual size in bytes.
+	OutPacket* p = new OutPacket(outBuf, outBufSize, myFree);
+
+	return p;
 }
 
 void BasicMessageBuffer::resizeMessageList(uint8_t size) {

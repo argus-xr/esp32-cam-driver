@@ -1,6 +1,5 @@
 #include "networkhandler.h"
 #include "queue.h"
-#include <WiFi.h>
 #include "networkconfig.h"
 #include "main.h"
 //#include "utility/util.h"
@@ -13,6 +12,13 @@
 
 namespace NH {
 
+void* myMalloc(uint64_t size) {
+    return heap_caps_malloc(size, MALLOC_CAP_8BIT);
+}
+void myFree(void* ptr) {
+    heap_caps_free(ptr);
+}
+
 NetworkHandler* NetworkHandler::inst = new NetworkHandler();
 NetworkHandler* NetworkHandler::getInstance() {
     return inst;
@@ -24,12 +30,12 @@ const int serverPort = 11000;
 WiFiClient client;
 
 int wStatus = WL_IDLE_STATUS;
-QueueArray<struct Packet*> buffer;
+QueueArray<OutPacket*> buffer;
 
 #define readBufferSize 1500
 uint8_t readBuf[readBufferSize];
 
-BasicMessageBuffer* buf = new BasicMessageBuffer();
+BasicMessageBuffer* buf = new BasicMessageBuffer(myMalloc, myFree);
 
 TaskHandle_t networkTaskHandle = NULL;
 QueueHandle_t messageQueue = NULL;
@@ -40,90 +46,62 @@ void NetworkHandler::handleNetworkStuff() {
     try {
         wStatus = WiFi.status();
 
-        if (wStatus != WL_CONNECTED && wStatus != WL_IDLE_STATUS) {
-            #ifdef NETUSEWPA2ENTERPRISE
-                WiFi.disconnect(true);
-                esp_wifi_sta_wpa2_ent_set_identity((uint8_t *)NETWPA2ENTID, strlen(NETWPA2ENTID));
-                esp_wifi_sta_wpa2_ent_set_username((uint8_t *)NETWPA2ENTUSER, strlen(NETWPA2ENTUSER));
-                esp_wifi_sta_wpa2_ent_set_password((uint8_t *)NETPASS, strlen(NETPASS));
-                Serial.println("Set enterprise username/pass/ident");
-                vTaskDelay(pdMS_TO_TICKS( 50 ));
-                esp_wpa2_config_t config = WPA2_CONFIG_INIT_DEFAULT();
-                Serial.println("Created default enterprise config");
-                vTaskDelay(pdMS_TO_TICKS( 50 ));
-                WiFi.mode(WIFI_STA);
-                esp_wifi_sta_wpa2_ent_enable(&config);
-                Serial.println("Loaded enterprise config");
-                vTaskDelay(pdMS_TO_TICKS( 50 ));
-                WiFi.begin(NETSSID);
-            #else
-                WiFi.begin(NETSSID, NETPASS);
-            #endif
-            Serial.print("Current status: ");
-            Serial.print(wStatus);
-            Serial.print(". Reconnecting to ");
-            Serial.println(NETSSID);
+        if (wStatus != WL_CONNECTED && wStatus != WL_IDLE_STATUS) { // WL_IDLE_STATUS means it's currently trying to connect.
+            wifiConnect();
             vTaskDelay(pdMS_TO_TICKS( 5000 ));
         }
 
-        if(messageQueue != NULL) {
-            NetMessageOut* msg = NULL;
-            while(xQueueReceive( messageQueue, &msg, 0 )) { // returns true if there's any messages
-                if(msg != NULL && msg != nullptr) {
-                    makeNetworkPacket(msg);
-                    delete msg;
+        try {
+            if(messageQueue) {
+                NetMessageOut* msg = nullptr;
+                while(xQueueReceive( messageQueue, &msg, 0 )) { // returns true if there's any messages
+                    if(msg) {
+                        OutPacket* pac = buf->messageToOutPacket(msg);
+                        buffer.enqueue(pac);
+                        delete msg;
+                    }
                 }
             }
+        } catch (std::exception e) {
+            Serial.printf("Exception in converting NetMessageOut to Packet: %s.\n", e.what());
         }
         
         if (wStatus == WL_CONNECTED) {
             if (client.connected()) {
                 if (!buffer.isEmpty()) {
                     try {
-                        Packet* p = buffer.pop();
+                        OutPacket* p = buffer.pop();
                         if (p != nullptr) {
-                            if (p->length > 0 && p->data != NULL && p->data != nullptr) {
-                                uint16_t bytesSent = 0;
-                                int sent = 0;
-                                do {
-                                    uint16_t bytesLeft = p->length - bytesSent;
-                                    uint8_t* buf = new uint8_t[bytesLeft];
-                                    memcpy(buf, p->data + bytesSent, bytesLeft);
-                                    sent = client.write(buf, bytesLeft);
-                                    Serial.printf("Sending %d bytes.\n", sent);
-                                    bytesSent += sent;
-                                } while (bytesSent < p->length && sent > 0);
-                            }
-                            if(p->data != NULL) {
-                                delete[] p->data;
-                            }
+                            uint16_t bytesSent = 0;
+                            int sent = 0;
+                            do {
+                                uint16_t bytesLeft = p->getDataLength() - bytesSent;
+                                if(bytesLeft > 1500) {
+                                    bytesLeft = 1500;
+                                }
+                                uint8_t* buf = (uint8_t*) myMalloc(bytesLeft);
+                                memcpy(buf, p->getData() + bytesSent, bytesLeft);
+                                sent = client.write(buf, bytesLeft);
+                                myFree(buf);
+                                Serial.printf("Sending %d bytes. Current memory: %u\n", sent, heap_caps_get_largest_free_block(MALLOC_CAP_8BIT));
+                                bytesSent += sent;
+                                taskYIELD();
+                            } while (bytesSent < p->getDataLength() && sent > 0);
                             delete p;
                         }
                     } catch (std::exception e) {
-                        Serial.println(e.what());
+                        Serial.printf("Exception in network handler send loop: %s.\n", e.what());
                     }
                 }
 
-                try {
-                    checkMessages();
-                } catch (std::exception e) {
-                    Serial.println(e.what());
-                }
+                checkMessages();
             } else {
-                if (client.connect(NETHOST, serverPort)) {
-                    Serial.print("Connected to ");
-                    Serial.println(NETHOST);
-                    client.setNoDelay(true); // consider setSync(true): flushes each write, slower but does not allocate temporary memory.
-                } else {
-                    Serial.print("Failed to connect to ");
-                    Serial.println(NETHOST);
-                }
+                tcpConnect();
             }
         }
         CH::setRecordVideo(isConnected());
     } catch (std::exception e) {
-        Serial.print("Exception in network handler: ");
-        Serial.println(e.what());
+        Serial.printf("Exception in network handler: %s.\n", e.what());
     } catch (...) {
         Serial.println("Non-std::exception exception caught.");
     }
@@ -133,34 +111,32 @@ void NetworkHandler::pushNetMessage(NetMessageOut* msg) {
     xQueueSend( messageQueue, &msg, xBlockTime );
 }
 
-void NetworkHandler::makeNetworkPacket(NetMessageOut* msg) {
-    Packet* p = new Packet();
-    p->length = buf->messageOutToByteArray(p->data, msg);
-    buffer.enqueue(p);
-}
-
 bool NetworkHandler::isConnected() {
     return (wStatus == WL_CONNECTED && client.connected());
 }
 
 void NetworkHandler::checkMessages() {
-    while (client.available()) {
-        int bytes = client.read(readBuf, readBufferSize);
-        if (bytes <= 0) {
-            break;
-        } else {
-            buf->insertBuffer(readBuf, bytes, true);
-            buf->checkMessages();
+    try {
+        while (client.available()) {
+            int bytes = client.read(readBuf, readBufferSize);
+            if (bytes <= 0) {
+                break;
+            } else {
+                buf->insertBuffer(readBuf, bytes, true);
+                buf->checkMessages();
+            }
         }
+        NetMessageIn* msg = nullptr;
+        do {
+            msg = buf->popMessage();
+            if(msg) {
+                processMessage(msg);
+            }
+            delete msg;
+        } while(msg);
+    } catch (std::exception e) {
+        Serial.printf("Exception in checkMessages: %s.\n", e.what());
     }
-    NetMessageIn* msg = nullptr;
-    do {
-        msg = buf->popMessage();
-        if(msg) {
-            processMessage(msg);
-        }
-        delete msg;
-    } while(msg);
 }
 
 void NetworkHandler::processMessage(NetMessageIn* msg) {
@@ -189,7 +165,7 @@ void NetworkHandler::processHandshake(NetMessageIn* msg) {
 
 void NetworkHandler::sendHandshake() {
     uint64_t guid = EConfig::getGuid();
-    NetMessageOut* msg = new NetMessageOut(10);
+    NetMessageOut* msg = newMessage(CTSMessageType::Handshake, 20);
     msg->writeVarInt((uint64_t) CTSMessageType::Handshake);
     msg->writeVarInt(guid);
     std::string contents = msg->debugBuffer();
@@ -208,8 +184,16 @@ void NetworkHandler::processSetGUID(NetMessageIn* msg) {
     Serial.printf("Processing SetGUID - GUID: %llu.\n", newGUID);
 }
 
+NetMessageOut* NetworkHandler::newMessage(CTSMessageType type, uint64_t length) {
+    NetMessageOut* nmo = new NetMessageOut(length, NH::myMalloc, NH::myFree);
+    nmo->writeVarInt((uint64_t) type);
+    return nmo;
+}
+
 void startNetworkHandlerTask() {
     messageQueue = xQueueCreate( 5, sizeof( NetMessageOut* ) );
+    
+    initWifi();
 
     xTaskCreatePinnedToCore(&networkHandlerTask, "NetworkTask", 60000, NULL, 0, &networkTaskHandle, tskNO_AFFINITY);
 }
@@ -217,7 +201,53 @@ void startNetworkHandlerTask() {
 void networkHandlerTask(void *pvParameters) {
     while(true) {
         NetworkHandler::getInstance()->handleNetworkStuff();
-        vTaskDelay(pdMS_TO_TICKS( 10 ));
+        taskYIELD();
+    }
+}
+
+void initWifi() {
+    WiFi.onEvent(onWifiConnect, SYSTEM_EVENT_STA_CONNECTED);
+    WiFi.onEvent(onWifiReady, SYSTEM_EVENT_WIFI_READY);
+}
+
+void wifiConnect() {
+    WiFi.setAutoReconnect(true);
+    #ifdef NETUSEWPA2ENTERPRISE
+        WiFi.disconnect(true);
+        esp_wifi_sta_wpa2_ent_set_identity((uint8_t *)NETWPA2ENTID, strlen(NETWPA2ENTID));
+        esp_wifi_sta_wpa2_ent_set_username((uint8_t *)NETWPA2ENTUSER, strlen(NETWPA2ENTUSER));
+        esp_wifi_sta_wpa2_ent_set_password((uint8_t *)NETPASS, strlen(NETPASS));
+        Serial.println("Set enterprise username/pass/ident");
+        vTaskDelay(pdMS_TO_TICKS( 50 ));
+        esp_wpa2_config_t config = WPA2_CONFIG_INIT_DEFAULT();
+        Serial.println("Created default enterprise config");
+        vTaskDelay(pdMS_TO_TICKS( 50 ));
+        WiFi.mode(WIFI_STA);
+        esp_wifi_sta_wpa2_ent_enable(&config);
+        Serial.println("Loaded enterprise config");
+        vTaskDelay(pdMS_TO_TICKS( 50 ));
+        WiFi.begin(NETSSID);
+    #else
+        WiFi.begin(NETSSID, NETPASS);
+    #endif
+    Serial.printf("Current status: %d, Reconnecting to %s.\n", wStatus, NETSSID);
+}
+
+void onWifiReady(WiFiEvent_t event, WiFiEventInfo_t info) {
+    wifiConnect();
+}
+
+void onWifiConnect(WiFiEvent_t event, WiFiEventInfo_t info) {
+    Serial.printf("Connected to WiFi, now connecting to server!\n");
+    tcpConnect();
+}
+
+void tcpConnect() {
+    if (client.connect(NETHOST, serverPort)) {
+        Serial.printf("Connected to %s.\n", NETHOST);
+        client.setNoDelay(true); // consider setSync(true): flushes each write, slower but does not allocate temporary memory.
+    } else {
+        Serial.printf("Failed to connect to %s.\n", NETHOST);
     }
 }
 

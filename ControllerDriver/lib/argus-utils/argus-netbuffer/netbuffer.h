@@ -4,8 +4,28 @@
 #include <cstdint>
 #include <string>
 
+class OutPacket {
+public:
+	OutPacket(uint8_t* inData, uint32_t inLength, void freeFunc(void* ptr));
+	~OutPacket();
+	uint32_t getDataLength();
+	uint8_t* getData();
+private:
+	uint8_t* data;
+	uint32_t length;
+	void (*myFree)(void*);
+};
+
+namespace NetBufferDefaultMalloc {
+	void* myMalloc(uint64_t size);
+	void myFree(void* ptr);
+};
+
 class NetBuffer {
 public:
+	NetBuffer();
+	NetBuffer(void* (*mallocFunction)(uint64_t), void (*freeFunction)(void*));
+	virtual ~NetBuffer();
 	void insertBuffer(uint8_t* buffer, uint32_t length, bool copyBuffer);
 	void removeStartOfBuffer(uint32_t length);
 	void setResizeStep(uint32_t step);
@@ -21,10 +41,14 @@ protected:
 	uint32_t internalBufferContentSize = 0;
 	uint32_t internalBufferMemorySize = 0;
 	uint32_t bufferResizeStep = 128;
+
+	void* (*myMalloc)(uint64_t);
+	void (*myFree)(void*);
 };
 
 class NetMessageIn {
 public:
+	NetMessageIn(uint8_t* buffer, uint32_t length, void* (*mallocFunction)(uint64_t), void (*freeFunction)(void*));
 	NetMessageIn(uint8_t* buffer, uint32_t length);
 	~NetMessageIn();
 	bool isValid();
@@ -45,10 +69,14 @@ protected:
 	uint8_t* internalBuffer;// = nullptr;
 	uint32_t bufferLength = 0;
 	uint32_t bufferPos = 0;
+
+	void* (*myMalloc)(uint64_t);
+	void (*myFree)(void*);
 };
 
 class NetMessageOut {
 public:
+	NetMessageOut(uint32_t length, void* (*mallocFunction)(uint64_t), void (*freeFunction)(void*));
 	NetMessageOut(uint32_t length);
 	~NetMessageOut();
 	template <typename T>
@@ -71,6 +99,9 @@ protected:
 	uint8_t* internalBuffer;// = nullptr;
 	uint32_t bufferLength = 0;
 	uint32_t bufferPos = 0;
+
+	void* (*myMalloc)(uint64_t);
+	void (*myFree)(void*);
 };
 
 #endif

@@ -117,19 +117,6 @@ namespace CH {
             return ESP_FAIL;
         }
 
-        /*uint8_t * buf = NULL;
-        size_t buf_len = 0;
-        bool converted = frame2jpg(fb, 0, &buf, &buf_len);
-
-        send_buf(buf, buf_len);
-        free(buf);
-
-        esp_camera_fb_return(fb);
-        if(!converted){
-            Serial.println("JPG conversion failed");
-            return ESP_FAIL;
-        }*/
-
         
         send_buf(fb->buf, fb->len);
 
@@ -141,11 +128,7 @@ namespace CH {
     void send_buf(uint8_t* buf, size_t buf_len) {
         Serial.printf("Start send_buf. Length: %d\n", buf_len);
         uint8_t varIntLength = ArgusNetUtils::bytesToFitVarInt(buf_len);
-        Serial.printf("send_buf line 2\n");
-        NetMessageOut* msg = new NetMessageOut(buf_len + varIntLength + 1 + 200); // +1 for message type length. buf_len * 2 because of a reallocation bug. TODO: Fix the reallocation code.
-        Serial.printf("send_buf line 3\n");
-        msg->writeVarInt((uint64_t) NH::CTSMessageType::VideoData);
-        Serial.printf("send_buf line 4\n");
+        NetMessageOut* msg = NH::NetworkHandler::newMessage(NH::CTSMessageType::VideoData, buf_len + varIntLength + 1 + 200); // +1 for message type length. buf_len * 2 because of a reallocation bug. TODO: Fix the reallocation code.
         msg->writeVarInt(buf_len);
         msg->writeByteBlob(buf, buf_len);
         NH::NetworkHandler::getInstance()->pushNetMessage(msg);
