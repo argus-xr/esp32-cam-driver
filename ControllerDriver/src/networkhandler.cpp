@@ -74,6 +74,7 @@ void NetworkHandler::handleNetworkStuff() {
                         if (p != nullptr) {
                             uint16_t bytesSent = 0;
                             int sent = 0;
+                            client.setNoDelay(false);
                             do {
                                 uint16_t bytesLeft = p->getDataLength() - bytesSent;
                                 if(bytesLeft > 1500) {
@@ -83,11 +84,21 @@ void NetworkHandler::handleNetworkStuff() {
                                 memcpy(buf, p->getData() + bytesSent, bytesLeft);
                                 sent = client.write(buf, bytesLeft);
                                 myFree(buf);
-                                Serial.printf("Sending %d bytes. Current memory: %u\n", sent, heap_caps_get_largest_free_block(MALLOC_CAP_8BIT));
                                 bytesSent += sent;
                                 taskYIELD();
                             } while (bytesSent < p->getDataLength() && sent > 0);
+                            client.setNoDelay(true);
                             delete p;
+
+
+                            struct timeval tv_now;
+                            gettimeofday(&tv_now, NULL);
+                            int64_t time_us = (int64_t)tv_now.tv_sec * 1000L + (int64_t)tv_now.tv_usec / 1000L;
+
+
+                            Serial.printf("Sending %d bytes. Time in ms: %llu.\n", bytesSent, time_us);
+                        } else {
+                            Serial.printf("Null outpacket found.\n");
                         }
                     } catch (std::exception e) {
                         Serial.printf("Exception in network handler send loop: %s.\n", e.what());

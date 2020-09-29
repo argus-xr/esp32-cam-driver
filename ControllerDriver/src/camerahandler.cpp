@@ -30,7 +30,7 @@ namespace CH {
         while(true) {
             if(getRecordVideo()) {
                 bmp_handler();
-                vTaskDelay(pdMS_TO_TICKS( 2000 ));
+                vTaskDelay(pdMS_TO_TICKS( 50 ));
             } else {
                 vTaskDelay(pdMS_TO_TICKS( 10 ));
             }
@@ -84,8 +84,8 @@ namespace CH {
         config.pixel_format = PIXFORMAT_JPEG;
         //config.pixel_format = PIXFORMAT_RGB888;
         //init with high specs to pre-allocate larger buffers
-        config.frame_size = FRAMESIZE_QVGA;
-        config.fb_count = 1;
+        config.frame_size = FRAMESIZE_SVGA;
+        config.fb_count = 2;
 
         // camera init
         esp_err_t err = esp_camera_init(&config);
@@ -93,18 +93,6 @@ namespace CH {
             Serial.printf("Camera init failed with error 0x%x", err);
             return;
         }
-        
-        sensor_t * s = esp_camera_sensor_get();
-        //s->set_colorbar(s, 1);
-        //initial sensors are flipped vertically and colors are a bit saturated
-        if (s->id.PID == OV3660_PID) {
-            s->set_vflip(s, 1);//flip it back
-            s->set_brightness(s, 1);//up the blightness just a bit
-            s->set_saturation(s, -2);//lower the saturation
-        }
-        //drop down frame size for higher initial frame rate
-        //s->set_framesize(s, FRAMESIZE_QVGA);
-        //s->set_framesize(s, FRAMESIZE_QQVGA);
     }
 
     esp_err_t bmp_handler() {
@@ -128,7 +116,7 @@ namespace CH {
     void send_buf(uint8_t* buf, size_t buf_len) {
         Serial.printf("Start send_buf. Length: %d\n", buf_len);
         uint8_t varIntLength = ArgusNetUtils::bytesToFitVarInt(buf_len);
-        NetMessageOut* msg = NH::NetworkHandler::newMessage(NH::CTSMessageType::VideoData, buf_len + varIntLength + 1 + 200); // +1 for message type length. buf_len * 2 because of a reallocation bug. TODO: Fix the reallocation code.
+        NetMessageOut* msg = NH::NetworkHandler::newMessage(NH::CTSMessageType::VideoData, buf_len * 2 + varIntLength + 1 + 200); // +1 for message type length. buf_len * 2 because of a reallocation bug. TODO: Fix the reallocation code.
         msg->writeVarInt(buf_len);
         msg->writeByteBlob(buf, buf_len);
         NH::NetworkHandler::getInstance()->pushNetMessage(msg);
