@@ -17,6 +17,7 @@ namespace NetBufferDefaultMalloc {
 
 OutPacket::OutPacket(uint8_t* inData, uint32_t inLength, void freeFunc(void* ptr)) {
 	data = inData;
+	length = inLength;
 	myFree = freeFunc;
 }
 
