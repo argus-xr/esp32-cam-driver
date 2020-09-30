@@ -74,20 +74,23 @@ void NetworkHandler::handleNetworkStuff() {
                         if (p != nullptr) {
                             uint16_t bytesSent = 0;
                             int sent = 0;
-                            client.setNoDelay(false);
                             do {
+                                Serial.printf("Sending some data.\n");
                                 uint16_t bytesLeft = p->getDataLength() - bytesSent;
-                                if(bytesLeft > 1500) {
-                                    bytesLeft = 1500;
+                                if(bytesLeft > 1000) {
+                                    bytesLeft = 1000;
                                 }
                                 uint8_t* buf = (uint8_t*) myMalloc(bytesLeft);
                                 memcpy(buf, p->getData() + bytesSent, bytesLeft);
+                                //memset(buf, 'A', bytesLeft); // purely for testing purposes.
                                 sent = client.write(buf, bytesLeft);
+                                if(sent <= 0) {
+                                    Serial.printf("Sending failed with EAGAIN/EWOULDBLOCK, bytes: %d.\n", bytesLeft);
+                                }
                                 myFree(buf);
                                 bytesSent += sent;
                                 taskYIELD();
                             } while (bytesSent < p->getDataLength() && sent > 0);
-                            client.setNoDelay(true);
                             delete p;
 
 
@@ -119,7 +122,9 @@ void NetworkHandler::handleNetworkStuff() {
 }
 
 void NetworkHandler::pushNetMessage(NetMessageOut* msg) {
-    xQueueSend( messageQueue, &msg, xBlockTime );
+    if(xQueueSend( messageQueue, &msg, xBlockTime) != pdTRUE) {
+        Serial.printf("Message slipped out of queue!\n");
+    }
 }
 
 bool NetworkHandler::isConnected() {
@@ -206,7 +211,7 @@ void startNetworkHandlerTask() {
     
     initWifi();
 
-    xTaskCreatePinnedToCore(&networkHandlerTask, "NetworkTask", 60000, NULL, 0, &networkTaskHandle, tskNO_AFFINITY);
+    xTaskCreatePinnedToCore(&networkHandlerTask, "NetworkTask", 60000, NULL, 5, &networkTaskHandle, tskNO_AFFINITY);
 }
 
 void networkHandlerTask(void *pvParameters) {
@@ -256,7 +261,8 @@ void onWifiConnect(WiFiEvent_t event, WiFiEventInfo_t info) {
 void tcpConnect() {
     if (client.connect(NETHOST, serverPort)) {
         Serial.printf("Connected to %s.\n", NETHOST);
-        client.setNoDelay(true); // consider setSync(true): flushes each write, slower but does not allocate temporary memory.
+        client.setNoDelay(false);
+        //client.setNoDelay(true); // consider setSync(true): flushes each write, slower but does not allocate temporary memory.
     } else {
         Serial.printf("Failed to connect to %s.\n", NETHOST);
     }

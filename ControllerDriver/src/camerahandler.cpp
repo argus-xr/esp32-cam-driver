@@ -18,7 +18,7 @@ namespace CH {
     std::atomic_bool recordVideo;
 
     void startCameraHandlerTask() {  
-        xTaskCreateUniversal(cameraHandlerTask, "CameraHandler", 16000, NULL, 0, &cameraTaskHandle, tskNO_AFFINITY);
+        xTaskCreateUniversal(cameraHandlerTask, "CameraHandler", 16000, NULL, 3, &cameraTaskHandle, tskNO_AFFINITY);
     }
 
     void cameraHandlerTask(void *pvParameters) {
@@ -82,8 +82,6 @@ namespace CH {
         config.xclk_freq_hz = 20000000;
         config.jpeg_quality = 20; // lower is higher quality.
         config.pixel_format = PIXFORMAT_JPEG;
-        //config.pixel_format = PIXFORMAT_RGB888;
-        //init with high specs to pre-allocate larger buffers
         config.frame_size = FRAMESIZE_SVGA;
         config.fb_count = 2;
 
@@ -114,7 +112,7 @@ namespace CH {
     }
 
     void send_buf(uint8_t* buf, size_t buf_len) {
-        Serial.printf("Start send_buf. Length: %d\n", buf_len);
+        Serial.printf("Start send_buf. Length: %d.\n", buf_len);
         uint8_t varIntLength = ArgusNetUtils::bytesToFitVarInt(buf_len);
         NetMessageOut* msg = NH::NetworkHandler::newMessage(NH::CTSMessageType::VideoData, buf_len * 2 + varIntLength + 1 + 200); // +1 for message type length. buf_len * 2 because of a reallocation bug. TODO: Fix the reallocation code.
         msg->writeVarInt(buf_len);
