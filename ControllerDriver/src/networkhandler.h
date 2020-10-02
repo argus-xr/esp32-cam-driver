@@ -4,6 +4,7 @@
 #include <Arduino.h>
 #include "argus-netbuffer/BasicMessageProtocol/BasicMessageProtocol.h"
 #include <WiFi.h>
+#include <asyncTCP.h>
 
 
 namespace NH {
@@ -37,12 +38,12 @@ namespace NH {
         static NetworkHandler* getInstance();
         
         void handleNetworkStuff();
+
+        void trySendStuff();
         
         void pushNetMessage(NetMessageOut* msg);
         void makeNetworkPacket(NetMessageOut* msg);
         bool isConnected();
-
-        void checkMessages();
         
         void processMessage(NetMessageIn* msg);
 
@@ -66,6 +67,12 @@ namespace NH {
     void wifiConnect();
     void onWifiConnect(WiFiEvent_t event, WiFiEventInfo_t info);
     void onWifiReady(WiFiEvent_t event, WiFiEventInfo_t info);
+
+    void onData(void *arg, AsyncClient *client, void *data, size_t len);
+    void onConnect(void *arg, AsyncClient *client);
+    void onDisconnect(void *arg, AsyncClient *client);
+    void onError(void *arg, AsyncClient *client, int8_t error);
+    void onTimeout(void *arg, AsyncClient *client, uint32_t time);
     void tcpConnect();
 }
 

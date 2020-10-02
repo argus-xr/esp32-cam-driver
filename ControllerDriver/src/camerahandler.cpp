@@ -31,6 +31,7 @@ namespace CH {
             if(getRecordVideo()) {
                 bmp_handler();
                 vTaskDelay(pdMS_TO_TICKS( 50 ));
+                //taskYIELD();
             } else {
                 vTaskDelay(pdMS_TO_TICKS( 10 ));
             }
@@ -79,10 +80,10 @@ namespace CH {
         config.pin_sscb_scl = SIOC_GPIO_NUM;
         config.pin_pwdn = PWDN_GPIO_NUM;
         config.pin_reset = RESET_GPIO_NUM;
-        config.xclk_freq_hz = 20000000;
+        config.xclk_freq_hz = 10000000;
         config.jpeg_quality = 20; // lower is higher quality.
         config.pixel_format = PIXFORMAT_JPEG;
-        config.frame_size = FRAMESIZE_SVGA;
+        config.frame_size = FRAMESIZE_QVGA;
         config.fb_count = 2;
 
         // camera init
@@ -112,7 +113,11 @@ namespace CH {
     }
 
     void send_buf(uint8_t* buf, size_t buf_len) {
-        Serial.printf("Start send_buf. Length: %d.\n", buf_len);
+        struct timeval tv_now;
+        gettimeofday(&tv_now, NULL);
+        int64_t time_ms = (int64_t)tv_now.tv_sec * 1000L + (int64_t)tv_now.tv_usec / 1000L;
+
+        Serial.printf("Start send_buf. Length: %d, time %llu.\n", buf_len, time_ms);
         uint8_t varIntLength = ArgusNetUtils::bytesToFitVarInt(buf_len);
         NetMessageOut* msg = NH::NetworkHandler::newMessage(NH::CTSMessageType::VideoData, buf_len * 2 + varIntLength + 1 + 200); // +1 for message type length. buf_len * 2 because of a reallocation bug. TODO: Fix the reallocation code.
         msg->writeVarInt(buf_len);

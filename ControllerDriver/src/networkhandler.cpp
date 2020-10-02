@@ -27,10 +27,13 @@ NetworkHandler* NetworkHandler::getInstance() {
 const int serverPort = 11000;
 
 // Use WiFiClient class to create TCP connections
-WiFiClient client;
+//WiFiClient client;
+AsyncClient* tcpClient = nullptr;
 
 int wStatus = WL_IDLE_STATUS;
 QueueArray<OutPacket*> buffer;
+OutPacket* currentPacket = nullptr;
+size_t currentPacketSpot = 0;
 
 #define readBufferSize 1500
 uint8_t readBuf[readBufferSize];
@@ -67,50 +70,8 @@ void NetworkHandler::handleNetworkStuff() {
         }
         
         if (wStatus == WL_CONNECTED) {
-            if (client.connected()) {
-                if (!buffer.isEmpty()) {
-                    try {
-                        OutPacket* p = buffer.pop();
-                        if (p != nullptr) {
-                            uint16_t bytesSent = 0;
-                            int sent = 0;
-                            do {
-                                Serial.printf("Sending some data.\n");
-                                uint16_t bytesLeft = p->getDataLength() - bytesSent;
-                                if(bytesLeft > 1000) {
-                                    bytesLeft = 1000;
-                                }
-                                uint8_t* buf = (uint8_t*) myMalloc(bytesLeft);
-                                memcpy(buf, p->getData() + bytesSent, bytesLeft);
-                                //memset(buf, 'A', bytesLeft); // purely for testing purposes.
-                                sent = client.write(buf, bytesLeft);
-                                if(sent <= 0) {
-                                    Serial.printf("Sending failed with EAGAIN/EWOULDBLOCK, bytes: %d.\n", bytesLeft);
-                                }
-                                myFree(buf);
-                                bytesSent += sent;
-                                taskYIELD();
-                            } while (bytesSent < p->getDataLength() && sent > 0);
-                            delete p;
-
-
-                            struct timeval tv_now;
-                            gettimeofday(&tv_now, NULL);
-                            int64_t time_us = (int64_t)tv_now.tv_sec * 1000L + (int64_t)tv_now.tv_usec / 1000L;
-
-
-                            Serial.printf("Sending %d bytes. Time in ms: %llu.\n", bytesSent, time_us);
-                        } else {
-                            Serial.printf("Null outpacket found.\n");
-                        }
-                    } catch (std::exception e) {
-                        Serial.printf("Exception in network handler send loop: %s.\n", e.what());
-                    }
-                }
-
-                checkMessages();
-            } else {
-                tcpConnect();
+            if (tcpClient->connected()) {
+                trySendStuff();
             }
         }
         CH::setRecordVideo(isConnected());
@@ -121,6 +82,47 @@ void NetworkHandler::handleNetworkStuff() {
     }
 }
 
+void NetworkHandler::trySendStuff() {
+    if (!buffer.isEmpty()) {
+        try {
+            //Serial.printf("TrySendStuff start.\n");
+            if(!currentPacket) {
+                currentPacket = buffer.pop();
+                //Serial.printf("Selected new packet for sending.\n");
+            }
+            if (currentPacket) {
+                int32_t len = currentPacket->getDataLength();
+                int32_t bytesToSend = len - currentPacketSpot;
+                int32_t clientSpace = tcpClient->space() - 1; // -1 just to make sure we have room. I fear the off-by-one!
+                //Serial.printf("Packetspot: %d. Data length: %d. Bytes to write: %d. Space available: %d.\n", currentPacketSpot, len, bytesToSend, clientSpace);
+                if(clientSpace < bytesToSend) { // somehow breaks if comparing size_t instead of int32_t
+                    //Serial.printf("Truncating bytesToSend (%d) to clientSpace (%d).\n", bytesToSend, clientSpace);
+                    bytesToSend = clientSpace;
+                }
+                if(bytesToSend <= 0) {
+                    return;
+                } else {
+                    //Serial.printf("Before add, sending %d bytes. CurrentPacketSpot is %d out of %u.\n", bytesToSend, currentPacketSpot, len);
+                    tcpClient->add((char*) (currentPacket->getData() + currentPacketSpot), bytesToSend);
+                    tcpClient->send();
+                    //Serial.printf("After send.\n");
+                    currentPacketSpot += bytesToSend;
+                    if(currentPacketSpot >= len) {
+                        //Serial.printf("Deleting packet.\n");
+                        delete currentPacket;
+                        currentPacket = nullptr;
+                        currentPacketSpot = 0;
+                    }
+                }
+
+                //Serial.printf("Sending data.\n");
+            }
+        } catch (std::exception e) {
+            Serial.printf("Exception in network handler send loop: %s.\n", e.what());
+        }
+    }
+}
+
 void NetworkHandler::pushNetMessage(NetMessageOut* msg) {
     if(xQueueSend( messageQueue, &msg, xBlockTime) != pdTRUE) {
         Serial.printf("Message slipped out of queue!\n");
@@ -128,31 +130,8 @@ void NetworkHandler::pushNetMessage(NetMessageOut* msg) {
 }
 
 bool NetworkHandler::isConnected() {
-    return (wStatus == WL_CONNECTED && client.connected());
-}
-
-void NetworkHandler::checkMessages() {
-    try {
-        while (client.available()) {
-            int bytes = client.read(readBuf, readBufferSize);
-            if (bytes <= 0) {
-                break;
-            } else {
-                buf->insertBuffer(readBuf, bytes, true);
-                buf->checkMessages();
-            }
-        }
-        NetMessageIn* msg = nullptr;
-        do {
-            msg = buf->popMessage();
-            if(msg) {
-                processMessage(msg);
-            }
-            delete msg;
-        } while(msg);
-    } catch (std::exception e) {
-        Serial.printf("Exception in checkMessages: %s.\n", e.what());
-    }
+    return (wStatus == WL_CONNECTED && tcpClient->connected());
+    //return (wStatus == WL_CONNECTED && client.connected());
 }
 
 void NetworkHandler::processMessage(NetMessageIn* msg) {
@@ -182,7 +161,6 @@ void NetworkHandler::processHandshake(NetMessageIn* msg) {
 void NetworkHandler::sendHandshake() {
     uint64_t guid = EConfig::getGuid();
     NetMessageOut* msg = newMessage(CTSMessageType::Handshake, 20);
-    msg->writeVarInt((uint64_t) CTSMessageType::Handshake);
     msg->writeVarInt(guid);
     std::string contents = msg->debugBuffer();
     Serial.printf("Sending handshake - GUID: %llu, contents: %s.\n", guid, contents.c_str());
@@ -222,6 +200,13 @@ void networkHandlerTask(void *pvParameters) {
 }
 
 void initWifi() {
+    tcpClient = new AsyncClient();
+    tcpClient->onData(onData, tcpClient);
+    tcpClient->onConnect(onConnect, tcpClient);
+    tcpClient->onDisconnect(onDisconnect, tcpClient);
+    tcpClient->onError(onError, tcpClient);
+    tcpClient->onTimeout(onTimeout, tcpClient);
+
     WiFi.onEvent(onWifiConnect, SYSTEM_EVENT_STA_CONNECTED);
     WiFi.onEvent(onWifiReady, SYSTEM_EVENT_WIFI_READY);
 }
@@ -255,17 +240,70 @@ void onWifiReady(WiFiEvent_t event, WiFiEventInfo_t info) {
 
 void onWifiConnect(WiFiEvent_t event, WiFiEventInfo_t info) {
     Serial.printf("Connected to WiFi, now connecting to server!\n");
+    vTaskDelay(pdMS_TO_TICKS(5000));
     tcpConnect();
 }
 
 void tcpConnect() {
-    if (client.connect(NETHOST, serverPort)) {
+    if(!tcpClient->connected() && !tcpClient->connecting()) {
+        Serial.printf("Starting TCP connection.\n");
+        tcpClient->connect(NETHOST, serverPort);
+    }
+    /*if (client.connect(NETHOST, serverPort)) {
         Serial.printf("Connected to %s.\n", NETHOST);
         client.setNoDelay(false);
         //client.setNoDelay(true); // consider setSync(true): flushes each write, slower but does not allocate temporary memory.
     } else {
         Serial.printf("Failed to connect to %s.\n", NETHOST);
+    }*/
+}
+
+void onData(void *arg, AsyncClient *client, void *data, size_t len) {
+    try {
+        if (len <= 0) {
+            return;
+        } else {
+            buf->insertBuffer((uint8_t*) data, len, true);
+            buf->checkMessages();
+        }
+        NetMessageIn* msg = nullptr;
+        do {
+            msg = buf->popMessage();
+            if(msg) {
+                NetworkHandler::getInstance()->processMessage(msg);
+            }
+            delete msg;
+        } while(msg);
+    } catch (std::exception e) {
+        Serial.printf("Exception in checkMessages: %s.\n", e.what());
     }
+    tcpClient->ack(len);
+}
+
+void onConnect(void *arg, AsyncClient *client) {
+    Serial.printf("TCP connected.\n");
+}
+
+void onDisconnect(void *arg, AsyncClient *client) {
+    Serial.printf("TCP disconnected.\n");
+    vTaskDelay(pdMS_TO_TICKS(500));
+    tcpConnect();
+}
+
+void onError(void *arg, AsyncClient *client, int8_t error) {
+    Serial.printf("LWIP error %d: %s.\n", error, tcpClient->errorToString(error));
+    switch(error) {
+        case ERR_ABRT:
+        vTaskDelay(pdMS_TO_TICKS(500));
+        tcpConnect();
+        break;
+        default:
+        break;
+    }
+}
+
+void onTimeout(void *arg, AsyncClient *client, uint32_t time) {
+    Serial.printf("TCP timeout.\n");
 }
 
 } // namespace NH
