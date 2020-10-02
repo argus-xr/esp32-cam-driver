@@ -24,7 +24,7 @@ void BasicMessageBuffer::checkMessages() {
 			bool posFound = false;
 			int32_t endpos = 1;
 			while (!posFound && endpos > 0) { // endpos < 0 means there's no more matching sequences.
-				endpos = findByteSequence(endSequence, endSequenceLength, endpos);
+				endpos = findByteSequence(endSequence, endSequenceLength, endpos + 1);
 				if (endpos > 0 && getByteAt(endpos - 1) != '\\') { // check if the \ character is escaped, which would make the \0 not count.
 					posFound = true;
 				}
@@ -148,19 +148,25 @@ OutPacket* BasicMessageBuffer::messageToOutPacket(NetMessageOut* msg) {
 }
 
 void BasicMessageBuffer::resizeMessageList(uint8_t size) {
-	if (size == 0) {
-		delete[] messageList;
-		messageList = nullptr;
+	if (size <= 0) {
+		size == 5;
+		/*if (messageList) {
+			delete[] messageList;
+			messageList = nullptr;
+		}*/
 	}
-	else {
-		if (size < messageListNum) {
-			size = messageListNum; // don't drop messages
+	//else {
+		if (size < messageListNum + 5) {
+			size = messageListNum + 5; // don't drop messages
 		}
 		NetMessageIn** tmp = messageList;
 		messageList = new NetMessageIn *[size];
-		if (tmp != nullptr) {
-			std::memcpy(messageList, tmp + messageListPos, messageListNum - messageListPos);
+		if (tmp) {
+			for (int i = 0; i < messageListNum - messageListPos; i++) {
+				messageList[i-messageListPos] = tmp[i];
+			}
+			//std::memcpy(messageList, tmp + messageListPos, messageListNum - messageListPos);
 			delete[] tmp;
 		}
-	}
+	//}
 }
