@@ -31,14 +31,14 @@ const int serverPort = 11000;
 AsyncClient* tcpClient = nullptr;
 
 int wStatus = WL_IDLE_STATUS;
-QueueArray<OutPacket*> buffer;
+QueueArray<NetMessageOut*> outMessagebuffer;
 OutPacket* currentPacket = nullptr;
 size_t currentPacketSpot = 0;
 
 #define readBufferSize 1500
 uint8_t readBuf[readBufferSize];
 
-BasicMessageBuffer* buf = new BasicMessageBuffer(myMalloc, myFree);
+BasicMessageBuffer* bmbuf = new BasicMessageBuffer(myMalloc, myFree);
 
 TaskHandle_t networkTaskHandle = NULL;
 QueueHandle_t messageQueue = NULL;
@@ -59,9 +59,7 @@ void NetworkHandler::handleNetworkStuff() {
                 NetMessageOut* msg = nullptr;
                 while(xQueueReceive( messageQueue, &msg, 0 )) { // returns true if there's any messages
                     if(msg) {
-                        OutPacket* pac = buf->messageToOutPacket(msg);
-                        buffer.enqueue(pac);
-                        delete msg;
+                        outMessagebuffer.enqueue(msg);
                     }
                 }
             }
@@ -83,12 +81,17 @@ void NetworkHandler::handleNetworkStuff() {
 }
 
 void NetworkHandler::trySendStuff() {
-    if (!buffer.isEmpty()) {
+    if (!outMessagebuffer.isEmpty()) {
         try {
             //Serial.printf("TrySendStuff start.\n");
             if(!currentPacket) {
-                currentPacket = buffer.pop();
-                //Serial.printf("Selected new packet for sending.\n");
+                NetMessageOut* msg = outMessagebuffer.pop();
+                if(msg) {
+                    OutPacket* pac = bmbuf->messageToOutPacket(msg);
+                    delete msg;
+                    currentPacket = pac;
+                    //Serial.printf("Selected new packet for sending.\n");
+                }
             }
             if (currentPacket) {
                 int32_t len = currentPacket->getDataLength();
@@ -249,13 +252,6 @@ void tcpConnect() {
         Serial.printf("Starting TCP connection.\n");
         tcpClient->connect(NETHOST, serverPort);
     }
-    /*if (client.connect(NETHOST, serverPort)) {
-        Serial.printf("Connected to %s.\n", NETHOST);
-        client.setNoDelay(false);
-        //client.setNoDelay(true); // consider setSync(true): flushes each write, slower but does not allocate temporary memory.
-    } else {
-        Serial.printf("Failed to connect to %s.\n", NETHOST);
-    }*/
 }
 
 void onData(void *arg, AsyncClient *client, void *data, size_t len) {
@@ -263,12 +259,12 @@ void onData(void *arg, AsyncClient *client, void *data, size_t len) {
         if (len <= 0) {
             return;
         } else {
-            buf->insertBuffer((uint8_t*) data, len, true);
-            buf->checkMessages();
+            bmbuf->insertBuffer((uint8_t*) data, len, true);
+            bmbuf->checkMessages();
         }
         NetMessageIn* msg = nullptr;
         do {
-            msg = buf->popMessage();
+            msg = bmbuf->popMessage();
             if(msg) {
                 NetworkHandler::getInstance()->processMessage(msg);
             }
