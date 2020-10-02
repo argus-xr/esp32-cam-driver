@@ -18,7 +18,7 @@ namespace CH {
     std::atomic_bool recordVideo;
 
     void startCameraHandlerTask() {  
-        xTaskCreateUniversal(cameraHandlerTask, "CameraHandler", 16000, NULL, 3, &cameraTaskHandle, tskNO_AFFINITY);
+        xTaskCreateUniversal(cameraHandlerTask, "CameraHandler", 60000, NULL, 0, &cameraTaskHandle, tskNO_AFFINITY);
     }
 
     void cameraHandlerTask(void *pvParameters) {
@@ -95,7 +95,7 @@ namespace CH {
     }
 
     esp_err_t bmp_handler() {
-        camera_fb_t * fb = NULL;
+        camera_fb_t * fb = nullptr;
         esp_err_t res = ESP_OK;
 
         fb = esp_camera_fb_get();
@@ -120,9 +120,12 @@ namespace CH {
         Serial.printf("Start send_buf. Length: %d, time %llu.\n", buf_len, time_ms);
         uint8_t varIntLength = ArgusNetUtils::bytesToFitVarInt(buf_len);
         NetMessageOut* msg = NH::NetworkHandler::newMessage(NH::CTSMessageType::VideoData, buf_len * 2 + varIntLength + 1 + 200); // +1 for message type length. buf_len * 2 because of a reallocation bug. TODO: Fix the reallocation code.
+        msg->writeVarInt(time_ms);
         msg->writeVarInt(buf_len);
         msg->writeByteBlob(buf, buf_len);
         NH::NetworkHandler::getInstance()->pushNetMessage(msg);
+        
+        Serial.printf("End send_buf.\n");
         // msg deleted elsewhere
     }
 

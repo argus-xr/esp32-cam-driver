@@ -178,7 +178,7 @@ NetMessageIn::NetMessageIn(uint8_t* buffer, uint32_t length) {
 }
 
 NetMessageIn::~NetMessageIn() {
-	if(internalBuffer != nullptr) {
+	if(internalBuffer) {
 		myFree(internalBuffer);
 		internalBuffer = nullptr;
 	}
@@ -320,7 +320,7 @@ NetMessageOut::NetMessageOut(uint32_t length) {
 }
 
 NetMessageOut::~NetMessageOut() {
-	if(internalBuffer != nullptr) {
+	if(internalBuffer) {
 		myFree(internalBuffer);
 		internalBuffer = nullptr;
 	}
