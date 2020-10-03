@@ -1,6 +1,7 @@
 #include "main.h"
 #include "networkhandler.h"
 #include "camerahandler.h"
+#include "I2CHandler.h"
 
 #include "argus-netbuffer/BasicMessageProtocol/BasicMessageProtocol.h"
 
@@ -11,7 +12,9 @@ void setup() {
         vTaskDelay(pdMS_TO_TICKS( 1000 ));
         NH::startNetworkHandlerTask();
         vTaskDelay(pdMS_TO_TICKS( 1000 ));
-        CH::startCameraHandlerTask();
+        IH::startI2CHandlerTask();
+        vTaskDelay(pdMS_TO_TICKS( 1000 ));
+        //CH::startCameraHandlerTask();
     } catch(std::exception e) {
         Serial.printf("Exception in setup(): %s", e.what());
     }
