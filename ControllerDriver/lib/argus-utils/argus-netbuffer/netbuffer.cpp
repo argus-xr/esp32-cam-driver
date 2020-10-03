@@ -251,6 +251,12 @@ uint64_t NetMessageIn::readVarInt() {
 	return val;
 }
 
+int64_t NetMessageIn::readVarIntSigned() {
+	int64_t val;
+	bufferPos += ArgusNetUtils::readVarIntSigned(internalBuffer + bufferPos, val); //TODO: Tell it how many bytes it can read, so it can stop and error if it would go out of bounds.
+	return val;
+}
+
 uint8_t* NetMessageIn::readByteBlob(uint32_t length) {
 	if (bufferLength < bufferPos + length) {
 		return nullptr;

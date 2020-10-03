@@ -50,6 +50,16 @@ namespace ArgusNetUtils {
         }
         return 0;
     }
+
+    uint8_t writeVarIntSigned(uint8_t* buf, int64_t val) {
+        if (val >= 0) {
+            return writeVarInt(buf, val * 2); // positive numbers become even.
+        }
+        else {
+            return writeVarInt(buf, -val * 2 - 1); // negative numbers become odd.
+        }
+    }
+
     uint8_t readVarInt(uint8_t* buf, uint64_t &val) {
         // Variable-length integer; starts with least significant bytes.
         val = 0;
@@ -67,6 +77,20 @@ namespace ArgusNetUtils {
         }
         return 0;
     }
+
+    uint8_t readVarIntSigned(uint8_t* buf, int64_t &val) {
+        uint64_t readVal = 0;
+        uint8_t retVal = readVarInt(buf, readVal);
+        if (readVal % 2 == 0) {
+            val = readVal / 2;
+            return retVal;
+        }
+        else {
+            val = -((int64_t) readVal) / 2 - 1;
+            return retVal;
+        }
+    }
+
     uint8_t bytesToFitVarInt(uint64_t val) {
         uint64_t mult = 128;
         for(int i = 1; i <= 10; ++i) {

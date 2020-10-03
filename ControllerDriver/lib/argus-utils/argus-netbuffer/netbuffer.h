@@ -59,6 +59,7 @@ public:
 	uint16_t readuint16();
 	uint32_t readuint32();
 	uint64_t readVarInt();
+	int64_t readVarIntSigned();
 	uint8_t* readByteBlob(uint32_t length);
 	std::string readVarString();
 	uint8_t* getInternalBuffer();
@@ -85,6 +86,7 @@ public:
 	void writeuint16(uint16_t val);
 	void writeuint32(uint32_t val);
 	void writeVarInt(uint64_t val);
+	void writeVarIntSigned(int64_t val);
 	uint8_t bytesToFitVarInt(uint64_t val);
 	void writeByteBlob(uint8_t* blob, uint32_t length);
 	void writeVarString(std::string text);

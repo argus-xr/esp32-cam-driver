@@ -238,6 +238,7 @@ void wifiConnect() {
 }
 
 void onWifiReady(WiFiEvent_t event, WiFiEventInfo_t info) {
+    Serial.printf("Wifi interface ready, trying to connect.\n");
     wifiConnect();
 }
 
