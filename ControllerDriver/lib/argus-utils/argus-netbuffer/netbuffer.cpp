@@ -372,8 +372,15 @@ void NetMessageOut::writeVarInt(uint64_t val) {
 	ensureSpaceFor(bytesToFitVarInt(val));
 	bufferPos += ArgusNetUtils::writeVarInt(internalBuffer + bufferPos, val);
 }
+void NetMessageOut::writeVarIntSigned(int64_t val) {
+	ensureSpaceFor(bytesToFitVarIntSigned(val));
+	bufferPos += ArgusNetUtils::writeVarIntSigned(internalBuffer + bufferPos, val);
+}
 uint8_t NetMessageOut::bytesToFitVarInt(uint64_t val) {
 	return ArgusNetUtils::bytesToFitVarInt(val);
+}
+uint8_t NetMessageOut::bytesToFitVarIntSigned(int64_t val) {
+	return ArgusNetUtils::bytesToFitVarIntSigned(val);
 }
 void NetMessageOut::writeByteBlob(uint8_t* blob, uint32_t length) {
 	ensureSpaceFor(length);

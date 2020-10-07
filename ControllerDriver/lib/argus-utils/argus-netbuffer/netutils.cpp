@@ -101,4 +101,12 @@ namespace ArgusNetUtils {
         }
         return 10;
     }
+
+    uint8_t bytesToFitVarIntSigned(int64_t val) {
+        if(val >= 0) {
+            return bytesToFitVarInt(val * 2);
+        } else {
+            return bytesToFitVarInt(-val * 2 - 1);
+        }
+    }
 }

@@ -13,6 +13,7 @@ namespace ArgusNetUtils {
 	uint8_t writeVarIntSigned(uint8_t* buf, int64_t val);
 	uint8_t readVarIntSigned(uint8_t* buf, int64_t &val);
 	uint8_t bytesToFitVarInt(uint64_t val);
+	uint8_t bytesToFitVarIntSigned(int64_t val);
 }
 
 #endif // NETUTILS_H

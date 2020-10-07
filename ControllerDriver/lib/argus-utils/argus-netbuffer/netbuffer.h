@@ -88,6 +88,7 @@ public:
 	void writeVarInt(uint64_t val);
 	void writeVarIntSigned(int64_t val);
 	uint8_t bytesToFitVarInt(uint64_t val);
+	uint8_t bytesToFitVarIntSigned(int64_t val);
 	void writeByteBlob(uint8_t* blob, uint32_t length);
 	void writeVarString(std::string text);
 
