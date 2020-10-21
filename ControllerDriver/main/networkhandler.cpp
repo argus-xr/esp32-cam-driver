@@ -19,6 +19,14 @@
 #include "EEPROMConfig.h"
 #include "wifihandler.h"
 
+
+#include "tcpip_adapter.h"
+
+#include "lwip/err.h"
+#include "lwip/sockets.h"
+#include "lwip/sys.h"
+#include <lwip/netdb.h>
+
 #ifdef NETUSEWPA2ENTERPRISE
 #include "esp_wpa2.h"
 #endif
@@ -39,8 +47,8 @@ NetworkHandler* NetworkHandler::getInstance() {
 
 const int serverPort = 11000;
 
-// Use AsyncClient class to create TCP connections
-AsyncClient* tcpClient = nullptr;
+bool connected = false;
+int sock = 0;
 
 std::queue<NetMessageOut*> outMessagebuffer;
 OutPacket* currentPacket = nullptr;
@@ -60,7 +68,7 @@ void NetworkHandler::handleNetworkStuff() {
 		vTaskDelay(pdMS_TO_TICKS( 100 ));
 	}
 
-	if(WiFiHandler::getInstance()->isConnected() && (!tcpClient || (!tcpClient->connected() && !tcpClient->connecting()))) {
+	if(WiFiHandler::getInstance()->isConnected() && (!connected)) {
 		tcpConnect();
 	}
 
@@ -74,15 +82,33 @@ void NetworkHandler::handleNetworkStuff() {
 			}
 		}
 		trySendStuff();
+        
+        uint8_t recvBuf[1000];
+        ssize_t bytesReceived = recv(sock, recvBuf, 1000, MSG_DONTWAIT);
+        if(bytesReceived > 0) {
+            bmbuf->insertBuffer(recvBuf, bytesReceived, true);
+            bmbuf->checkMessages();
+        }
+        NetMessageIn* msg = nullptr;
+        do {
+            msg = bmbuf->popMessage();
+            if(msg) {
+                processMessage(msg);
+            }
+            delete msg;
+        } while(msg);
 	}
 
 	CH::setRecordVideo(isConnected());
-	taskYIELD();
+	vTaskDelay(pdMS_TO_TICKS(3));
 }
 
 void NetworkHandler::trySendStuff() {
     if (!outMessagebuffer.empty()) {
-        try {
+        uint8_t outBuf[1000];
+        uint16_t bytesFree = 1000;
+        uint16_t bufSpot = 0;
+        while(!outMessagebuffer.empty() && bytesFree > 0) {
             //Serial.printf("TrySendStuff start.\n");
             if(!currentPacket) {
                 NetMessageOut* msg = outMessagebuffer.front();
@@ -97,18 +123,19 @@ void NetworkHandler::trySendStuff() {
             if (currentPacket) {
                 int32_t len = currentPacket->getDataLength();
                 int32_t bytesToSend = len - currentPacketSpot;
-                int32_t clientSpace = tcpClient->space() - 1; // -1 just to make sure we have room. I fear the off-by-one!
                 //Serial.printf("Packetspot: %d. Data length: %d. Bytes to write: %d. Space available: %d.\n", currentPacketSpot, len, bytesToSend, clientSpace);
-                if(clientSpace < bytesToSend) { // somehow breaks if comparing size_t instead of int32_t
+                if(bytesFree < bytesToSend) { // somehow breaks if comparing size_t instead of int32_t
                     //Serial.printf("Truncating bytesToSend (%d) to clientSpace (%d).\n", bytesToSend, clientSpace);
-                    bytesToSend = clientSpace;
+                    bytesToSend = bytesFree;
                 }
                 if(bytesToSend <= 0) {
-                    return;
+                    break;
                 } else {
                     //Serial.printf("Before add, sending %d bytes. CurrentPacketSpot is %d out of %u.\n", bytesToSend, currentPacketSpot, len);
-                    tcpClient->add((char*) (currentPacket->getData() + currentPacketSpot), bytesToSend);
-                    tcpClient->send();
+                    memcpy(outBuf + bufSpot, currentPacket->getData() + currentPacketSpot, bytesToSend);
+                    bufSpot += bytesToSend;
+                    bytesFree -= bytesToSend;
+                    
                     //Serial.printf("After send.\n");
                     currentPacketSpot += bytesToSend;
                     if(currentPacketSpot >= len) {
@@ -118,11 +145,13 @@ void NetworkHandler::trySendStuff() {
                         currentPacketSpot = 0;
                     }
                 }
-
-                //Serial.printf("Sending data.\n");
             }
-        } catch (std::exception &e) {
-            Serial.printf("Exception in network handler send loop: %s.\n", e.what());
+            if(bufSpot > bytesFree) {
+                printf("Used most of send buffer: bufSpot=%u, bytesFree=%u.\n", bufSpot, bytesFree);
+            }
+            send(sock, outBuf, bufSpot, 0);
+
+            //Serial.printf("Sending data.\n");
         }
     }
 }
@@ -134,8 +163,7 @@ void NetworkHandler::pushNetMessage(NetMessageOut* msg) {
 }
 
 bool NetworkHandler::isConnected() {
-	if(!tcpClient) {return false;}
-	return tcpClient->connected();
+	return connected;
 }
 
 void NetworkHandler::processMessage(NetMessageIn* msg) {
@@ -206,69 +234,38 @@ void networkHandlerTask(void *pvParameters) {
 }
 
 void tcpInit() {
-    tcpClient = new AsyncClient();
-    tcpClient->onData(onData, tcpClient);
-    tcpClient->onConnect(onConnect, tcpClient);
-    tcpClient->onDisconnect(onDisconnect, tcpClient);
-    tcpClient->onError(onError, tcpClient);
-    tcpClient->onTimeout(onTimeout, tcpClient);
 }
 
 void tcpConnect() {
-    if(!tcpClient->connected() && !tcpClient->connecting()) {
+    if(WiFiHandler::getInstance()->isConnected() && !connected) {
         Serial.printf("Starting TCP connection.\n");
-        tcpClient->connect(NETHOST, serverPort);
-        tcpClient->setNoDelay(false);
-        vTaskDelay(pdMS_TO_TICKS(100));
-    }
-}
+        
+        EConfig::initEEPROM();
+        
+        struct sockaddr_in dest_addr;
+        dest_addr.sin_addr.s_addr = inet_addr(NETHOST);
+        dest_addr.sin_family = AF_INET;
+        dest_addr.sin_port = htons(serverPort);
+        int addr_family = AF_INET;
+        int ip_protocol = IPPROTO_IP;
+        char addr_str[128];
+        inet_ntoa_r(dest_addr.sin_addr, addr_str, sizeof(addr_str) - 1);
 
-void onData(void *arg, AsyncClient *client, void *data, size_t len) {
-    try {
-        if (len <= 0) {
+        sock = socket(addr_family, SOCK_STREAM, ip_protocol);
+        if (sock < 0) {
+            printf("Unable to create socket: errno %d.\n", errno);
             return;
-        } else {
-            bmbuf->insertBuffer((uint8_t*) data, len, true);
-            bmbuf->checkMessages();
         }
-        NetMessageIn* msg = nullptr;
-        do {
-            msg = bmbuf->popMessage();
-            if(msg) {
-                NetworkHandler::getInstance()->processMessage(msg);
-            }
-            delete msg;
-        } while(msg);
-    } catch (std::exception &e) {
-        Serial.printf("Exception in checkMessages: %s.\n", e.what());
+        printf("Socket created, connecting to %s:%d.\n", NETHOST, serverPort);
+
+        int err = connect(sock, (struct sockaddr *)&dest_addr, sizeof(dest_addr));
+        if (err != 0) {
+            printf("Socket unable to connect: errno %d.\n", errno);
+            return;
+        }
+        printf("Successfully connected.\n");
+        connected = true;
     }
-    tcpClient->ack(len);
-}
-
-void onConnect(void *arg, AsyncClient *client) {
-    Serial.printf("TCP connected.\n");
-}
-
-void onDisconnect(void *arg, AsyncClient *client) {
-    Serial.printf("TCP disconnected.\n");
-    vTaskDelay(pdMS_TO_TICKS(500));
-    tcpConnect();
-}
-
-void onError(void *arg, AsyncClient *client, int8_t error) {
-    Serial.printf("LWIP error %d: %s.\n", error, tcpClient->errorToString(error));
-    switch(error) {
-        case ERR_ABRT:
-        vTaskDelay(pdMS_TO_TICKS(500));
-        tcpConnect();
-        break;
-        default:
-        break;
-    }
-}
-
-void onTimeout(void *arg, AsyncClient *client, uint32_t time) {
-    Serial.printf("TCP timeout.\n");
 }
 
 } // namespace NH

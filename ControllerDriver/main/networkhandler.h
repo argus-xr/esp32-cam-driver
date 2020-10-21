@@ -3,8 +3,6 @@
 
 #include "argus-netbuffer/BasicMessageProtocol/BasicMessageProtocol.h"
 
-#include <asyncTCP.h>
-
 #include <stdint.h>
 
 
@@ -61,12 +59,7 @@ namespace NH {
 
     void startNetworkHandlerTask();
     void networkHandlerTask(void *pvParameters);
-
-    void onData(void *arg, AsyncClient *client, void *data, size_t len);
-    void onConnect(void *arg, AsyncClient *client);
-    void onDisconnect(void *arg, AsyncClient *client);
-    void onError(void *arg, AsyncClient *client, int8_t error);
-    void onTimeout(void *arg, AsyncClient *client, uint32_t time);
+    
     void tcpConnect();
     void tcpInit();
 }

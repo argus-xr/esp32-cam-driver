@@ -30,6 +30,8 @@ void WiFiHandler::wifiConnect() {
 		try {
 			printf("Connecting to %s.\n", NETSSID);
 			WiFi.setAutoReconnect(true);
+			wl_status_t result;
+			vTaskDelay(pdMS_TO_TICKS(100));
 			#ifdef NETUSEWPA2ENTERPRISE
 				WiFi.disconnect(true);
 				esp_wifi_sta_wpa2_ent_set_identity((uint8_t *)NETWPA2ENTID, strlen(NETWPA2ENTID));
@@ -44,11 +46,15 @@ void WiFiHandler::wifiConnect() {
 				esp_wifi_sta_wpa2_ent_enable(&config);
 				Serial.println("Loaded enterprise config");
 				vTaskDelay(pdMS_TO_TICKS( 50 ));
-				WiFi.begin(NETSSID);
+				result = WiFi.begin(NETSSID);
 			#else
-				WiFi.begin(NETSSID, NETPASS);
+				result = WiFi.begin(NETSSID, NETPASS);
 			#endif
-				printf("Connected!\n");
+				if(result == WL_CONNECTED) {
+					printf("Connected!\n");
+				} else {
+					printf("WiFi status: %d.\n", result);
+				}
 		} catch (std::exception &e) {
 			printf("Exception: %s\n", e.what());
 		}
