@@ -1,0 +1,12 @@
+[submodule "ControllerDriver/components/esp32-camera"]
+	path = ControllerDriver/components/esp32-camera
+	url = https://github.com/espressif/esp32-camera.git
+[submodule "ControllerDriver/components/arduino-esp32"]
+	path = ControllerDriver/components/arduino-esp32
+	url = https://github.com/espressif/arduino-esp32.git
+[submodule "ControllerDriver/components/AsyncTCP"]
+	path = ControllerDriver/components/AsyncTCP
+	url = https://github.com/me-no-dev/AsyncTCP.git
+[submodule "ControllerDriver/main/argus-utils"]
+	path = ControllerDriver/main/argus-utils
+	url = https://github.com/argus-xr/argus-utils.git

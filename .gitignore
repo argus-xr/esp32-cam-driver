@@ -1,2 +1,4 @@
 /ControllerDriver/src/networkconfig.h
 *.pdb
+/ControllerDriver/sdkconfig
+/ControllerDriver/main/networkconfig.h
