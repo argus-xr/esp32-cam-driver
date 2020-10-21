@@ -1,5 +1,7 @@
 #include "camerahandler.h"
 #include "esp_camera.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 
 #define CAMERA_MODEL_AI_THINKER
 #include "camera_pins.h" // load up ESP32-Cam pins, but allow switching to other models easily if needed.
@@ -11,28 +13,26 @@
 #include <atomic>
 
 namespace CH {
-
-    SemaphoreHandle_t semaphore = NULL;
-
     TaskHandle_t cameraTaskHandle = NULL;
     std::atomic_bool recordVideo;
 
-    void startCameraHandlerTask() {  
-        xTaskCreateUniversal(cameraHandlerTask, "CameraHandler", 16000, NULL, 0, &cameraTaskHandle, CONFIG_ARDUINO_RUNNING_CORE);
+    void startCameraHandlerTask() {
+        printf("Starting camera handler task.\n");
+        xTaskCreate(cameraHandlerTask, "CameraHandler", 60000, nullptr, 0, &cameraTaskHandle);
     }
 
     void cameraHandlerTask(void *pvParameters) {
-        semaphore = xSemaphoreCreateMutex();
-
         recordVideo.store(false);
+        printf("Initializing camera.\n");
         initCamera();
 
         while(true) {
             if(getRecordVideo()) {
                 bmp_handler();
-                delay(10000);
+                vTaskDelay(pdMS_TO_TICKS( 50 ));
+                //taskYIELD();
             } else {
-                delay(10);
+                vTaskDelay(pdMS_TO_TICKS( 10 ));
             }
         }
     }
@@ -43,20 +43,6 @@ namespace CH {
 
     bool getRecordVideo() {
         return recordVideo;
-    }
-
-    bool getMutex() {
-        if(semaphore != NULL) {
-            return (xSemaphoreTake( semaphore, ( TickType_t ) 10 ) == pdTRUE );
-        } else {
-            return false;
-        }
-    }
-
-    void giveMutex() {
-        if (semaphore != NULL) {
-            xSemaphoreGive( semaphore );
-        }
     }
 
     void initCamera() {
@@ -82,54 +68,27 @@ namespace CH {
         config.xclk_freq_hz = 20000000;
         config.jpeg_quality = 20; // lower is higher quality.
         config.pixel_format = PIXFORMAT_JPEG;
-        //config.pixel_format = PIXFORMAT_RGB888;
-        //init with high specs to pre-allocate larger buffers
-        config.frame_size = FRAMESIZE_VGA;
-        config.fb_count = 1;
+        config.frame_size = FRAMESIZE_QVGA;
+        //config.fb_count = 2;
 
         // camera init
         esp_err_t err = esp_camera_init(&config);
         if (err != ESP_OK) {
-            Serial.printf("Camera init failed with error 0x%x", err);
+            printf("Camera init failed with error 0x%x", err);
             return;
         }
-        
-        sensor_t * s = esp_camera_sensor_get();
-        //s->set_colorbar(s, 1);
-        //initial sensors are flipped vertically and colors are a bit saturated
-        if (s->id.PID == OV3660_PID) {
-            s->set_vflip(s, 1);//flip it back
-            s->set_brightness(s, 1);//up the blightness just a bit
-            s->set_saturation(s, -2);//lower the saturation
-        }
-        //drop down frame size for higher initial frame rate
-        //s->set_framesize(s, FRAMESIZE_QVGA);
-        //s->set_framesize(s, FRAMESIZE_QQVGA);
+		printf("Camera initialized.\n");
     }
 
     esp_err_t bmp_handler() {
-        camera_fb_t * fb = NULL;
+        camera_fb_t * fb = nullptr;
         esp_err_t res = ESP_OK;
 
         fb = esp_camera_fb_get();
         if (!fb) {
-            Serial.println("Camera capture failed");
+            printf("Camera capture failed.\n");
             return ESP_FAIL;
         }
-
-        /*uint8_t * buf = NULL;
-        size_t buf_len = 0;
-        bool converted = frame2jpg(fb, 0, &buf, &buf_len);
-
-        send_buf(buf, buf_len);
-        free(buf);
-
-        esp_camera_fb_return(fb);
-        if(!converted){
-            Serial.println("JPG conversion failed");
-            return ESP_FAIL;
-        }*/
-
         
         send_buf(fb->buf, fb->len);
 
@@ -139,16 +98,19 @@ namespace CH {
     }
 
     void send_buf(uint8_t* buf, size_t buf_len) {
-        Serial.printf("Start send_buf. Length: %d\n", buf_len);
+        struct timeval tv_now;
+        gettimeofday(&tv_now, NULL);
+        int64_t time_ms = (int64_t)tv_now.tv_sec * 1000L + (int64_t)tv_now.tv_usec / 1000L;
+
+        printf("Start send_buf. Length: %d, time %llu.\n", buf_len, time_ms);
         uint8_t varIntLength = ArgusNetUtils::bytesToFitVarInt(buf_len);
-        Serial.printf("send_buf line 2\n");
-        NetMessageOut* msg = new NetMessageOut(buf_len + varIntLength + 1 + 200); // +1 for message type length. buf_len * 2 because of a reallocation bug. TODO: Fix the reallocation code.
-        Serial.printf("send_buf line 3\n");
-        msg->writeVarInt(1);
-        Serial.printf("send_buf line 4\n");
+        NetMessageOut* msg = NH::NetworkHandler::newMessage(NH::CTSMessageType::VideoData, buf_len * 2 + varIntLength + 1 + 200); // +1 for message type length. buf_len * 2 because of a reallocation bug. TODO: Fix the reallocation code.
+        msg->writeVarInt(time_ms);
         msg->writeVarInt(buf_len);
         msg->writeByteBlob(buf, buf_len);
-        NH::pushNetMessage(msg);
+        NH::NetworkHandler::getInstance()->pushNetMessage(msg);
+        
+        printf("End send_buf.\n");
         // msg deleted elsewhere
     }
 

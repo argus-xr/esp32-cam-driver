@@ -1,7 +1,8 @@
 #ifndef CAMERAHANDLER_H
 #define CAMERAHANDLER_H
 
-#include <Arduino.h>
+#include <stdint.h>
+#include "esp_camera.h"
 
 namespace CH {
 
@@ -10,9 +11,6 @@ namespace CH {
 
     void setRecordVideo(bool record);
     bool getRecordVideo();
-
-    bool getMutex();
-    void giveMutex();
 
     void initCamera();
     void send_buf(uint8_t* buf, size_t buf_len);
