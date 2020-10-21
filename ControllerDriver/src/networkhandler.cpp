@@ -81,47 +81,53 @@ void NetworkHandler::handleNetworkStuff() {
 }
 
 void NetworkHandler::trySendStuff() {
-    if (!outMessagebuffer.isEmpty()) {
-        try {
-            //Serial.printf("TrySendStuff start.\n");
-            if(!currentPacket) {
-                NetMessageOut* msg = outMessagebuffer.pop();
-                if(msg) {
-                    OutPacket* pac = bmbuf->messageToOutPacket(msg);
-                    delete msg;
-                    currentPacket = pac;
-                    //Serial.printf("Selected new packet for sending.\n");
-                }
-            }
-            if (currentPacket) {
-                int32_t len = currentPacket->getDataLength();
-                int32_t bytesToSend = len - currentPacketSpot;
-                int32_t clientSpace = tcpClient->space() - 1; // -1 just to make sure we have room. I fear the off-by-one!
-                //Serial.printf("Packetspot: %d. Data length: %d. Bytes to write: %d. Space available: %d.\n", currentPacketSpot, len, bytesToSend, clientSpace);
-                if(clientSpace < bytesToSend) { // somehow breaks if comparing size_t instead of int32_t
-                    //Serial.printf("Truncating bytesToSend (%d) to clientSpace (%d).\n", bytesToSend, clientSpace);
-                    bytesToSend = clientSpace;
-                }
-                if(bytesToSend <= 0) {
-                    return;
-                } else {
-                    //Serial.printf("Before add, sending %d bytes. CurrentPacketSpot is %d out of %u.\n", bytesToSend, currentPacketSpot, len);
-                    tcpClient->add((char*) (currentPacket->getData() + currentPacketSpot), bytesToSend);
-                    tcpClient->send();
-                    //Serial.printf("After send.\n");
-                    currentPacketSpot += bytesToSend;
-                    if(currentPacketSpot >= len) {
-                        //Serial.printf("Deleting packet.\n");
-                        delete currentPacket;
-                        currentPacket = nullptr;
-                        currentPacketSpot = 0;
+    size_t bytesLeft = tcpClient->space();
+    if(bytesLeft > 1000) {
+        bool send = false;
+        while ((!outMessagebuffer.isEmpty() || currentPacket) && bytesLeft > 0) {
+            try {
+                if(!currentPacket) {
+                    NetMessageOut* msg = outMessagebuffer.pop();
+                    if(msg) {
+                        OutPacket* pac = bmbuf->messageToOutPacket(msg);
+                        delete msg;
+                        currentPacket = pac;
                     }
                 }
+                if (currentPacket) {
+                    int32_t len = currentPacket->getDataLength();
+                    int32_t bytesToSend = len - currentPacketSpot;
+                    int32_t clientSpace = bytesLeft - 1; // -1 just to make sure we have room. I fear the off-by-one!
+                    //Serial.printf("Packetspot: %d. Data length: %d. Bytes to write: %d. Space available: %d.\n", currentPacketSpot, len, bytesToSend, clientSpace);
+                    if(clientSpace < bytesToSend) { // somehow breaks if comparing size_t instead of int32_t
+                        //Serial.printf("Truncating bytesToSend (%d) to clientSpace (%d).\n", bytesToSend, clientSpace);
+                        bytesToSend = clientSpace;
+                    }
+                    if(bytesToSend <= 0) {
+                        break;
+                    } else {
+                        //Serial.printf("Before add, sending %d bytes. CurrentPacketSpot is %d out of %u.\n", bytesToSend, currentPacketSpot, len);
+                        tcpClient->add((char*) (currentPacket->getData() + currentPacketSpot), bytesToSend);
+                        bytesLeft -= bytesToSend;
+                        send = true;
+                        //Serial.printf("After send.\n");
+                        currentPacketSpot += bytesToSend;
+                        if(currentPacketSpot >= len) {
+                            //Serial.printf("Deleting packet.\n");
+                            delete currentPacket;
+                            currentPacket = nullptr;
+                            currentPacketSpot = 0;
+                        }
+                    }
 
-                //Serial.printf("Sending data.\n");
+                    //Serial.printf("Sending data.\n");
+                }
+            } catch (std::exception e) {
+                Serial.printf("Exception in network handler send loop: %s.\n", e.what());
             }
-        } catch (std::exception e) {
-            Serial.printf("Exception in network handler send loop: %s.\n", e.what());
+        }
+        if(send) {
+            tcpClient->send();
         }
     }
 }
@@ -252,6 +258,7 @@ void tcpConnect() {
     if(!tcpClient->connected() && !tcpClient->connecting()) {
         Serial.printf("Starting TCP connection.\n");
         tcpClient->connect(NETHOST, serverPort);
+        tcpClient->setNoDelay(false);
     }
 }
 
