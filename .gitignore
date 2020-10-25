@@ -2,3 +2,5 @@
 *.pdb
 /ControllerDriver/sdkconfig
 /ControllerDriver/main/networkconfig.h
+/ControllerDriver/.settings
+/ControllerDriver/.vscode

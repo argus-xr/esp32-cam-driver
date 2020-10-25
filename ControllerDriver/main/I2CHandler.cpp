@@ -107,7 +107,7 @@ void sendIMUData() {
             msg->writeVarIntSigned((int64_t) d->gZ);
             msg->writeVarInt(d->timestamp_us);
 
-            printf("IMU: %6.2f %6.2f %6.2f\n", d->aX * 8.0f * 9.81f / INT16_MAX, d->aY * 8.0f * 9.81f / INT16_MAX, d->aZ * 8.0f * 9.81f / INT16_MAX);
+            //printf("IMU: %6.2f %6.2f %6.2f\n", d->aX * 8.0f * 9.81f / INT16_MAX, d->aY * 8.0f * 9.81f / INT16_MAX, d->aZ * 8.0f * 9.81f / INT16_MAX);
 
             delete d;
         }
